@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Incidencias{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">Incidencias</h4>
+    <a href="{{ url_for('nueva_incidencia') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva</a>
+</div>
+
+<div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label class="form-label small">Estado</label>
+            <select name="estado" class="form-select form-select-sm">
+                <option value="">Todos</option>
+                {% for e in estados %}
+                <option value="{{ e }}" {{ 'selected' if filtro_estado == e }}>{{ e }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small">Prioridad</label>
+            <select name="prioridad" class="form-select form-select-sm">
+                <option value="">Todas</option>
+                {% for p in prioridades %}
+                <option value="{{ p }}" {{ 'selected' if filtro_prioridad == p }}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-sm btn-outline-primary">Filtrar</button>
+            <a href="{{ url_for('lista_incidencias') }}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
+        </div>
+    </form>
+</div>
+
+{% if incidencias %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>#</th><th>Titulo</th><th>Estado</th><th>Prioridad</th><th>Categoria</th><th>Cliente</th><th>Tecnico</th></tr></thead>
+            <tbody>
+            {% for i in incidencias %}
+            <tr style="cursor:pointer" onclick="location.href='{{ url_for('detalle_incidencia', inc_id=i.id) }}'">
+                <td>{{ i.id }}</td>
+                <td>{{ i.titulo }}</td>
+                <td><span class="badge bg-{{ estado_color.get(i.estado, 'secondary') }}">{{ i.estado }}</span></td>
+                <td><span class="badge bg-{{ prioridad_color.get(i.prioridad, 'secondary') }}">{{ i.prioridad }}</span></td>
+                <td>{{ i.categoria or '-' }}</td>
+                <td>{{ i.cliente_nombre or '-' }}</td>
+                <td>{{ i.tecnico_nombre or 'Sin asignar' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card p-4 text-center text-muted">
+    <p class="mb-0">No hay incidencias con estos filtros.</p>
+</div>
+{% endif %}
+{% endblock %}

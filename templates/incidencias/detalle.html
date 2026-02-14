@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block titulo %}Incidencia #{{ inc.id }}{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">
+        <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }} me-2">{{ inc.estado }}</span>
+        #{{ inc.id }} - {{ inc.titulo }}
+    </h4>
+    <a href="{{ url_for('lista_incidencias') }}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-8">
+        <div class="card p-4">
+            <h6>Descripcion</h6>
+            <p class="mb-3">{{ inc.descripcion or 'Sin descripcion' }}</p>
+            <div class="row g-2 text-muted small">
+                <div class="col-6"><strong>Prioridad:</strong> <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }}">{{ inc.prioridad }}</span></div>
+                <div class="col-6"><strong>Categoria:</strong> {{ inc.categoria or '-' }}</div>
+                <div class="col-6"><strong>Cliente:</strong> {{ inc.cliente_nombre or '-' }}</div>
+                <div class="col-6"><strong>Tecnico:</strong> {{ inc.tecnico_nombre or 'Sin asignar' }}</div>
+                <div class="col-6"><strong>Creada:</strong> {{ inc.creado_en }}</div>
+                <div class="col-6"><strong>Actualizada:</strong> {{ inc.actualizado_en }}</div>
+                {% if inc.cerrado_en %}
+                <div class="col-12"><strong>Cerrada:</strong> {{ inc.cerrado_en }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-3 mb-3">
+            <h6 class="mb-2">Cambiar estado</h6>
+            <form method="post" action="{{ url_for('cambiar_estado', inc_id=inc.id) }}">
+                <select name="estado" class="form-select form-select-sm mb-2">
+                    {% for e in estados %}
+                    <option value="{{ e }}" {{ 'selected' if inc.estado == e }}>{{ e }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-sm btn-warning w-100">Actualizar</button>
+            </form>
+        </div>
+        <div class="card p-3 mb-3">
+            <h6 class="mb-2">Asignar tecnico</h6>
+            <form method="post" action="{{ url_for('asignar_tecnico', inc_id=inc.id) }}">
+                <select name="tecnico_id" class="form-select form-select-sm mb-2">
+                    <option value="">-- Sin asignar --</option>
+                    {% for t in tecnicos %}
+                    <option value="{{ t.id }}" {{ 'selected' if inc.tecnico_id == t.id }}>{{ t.nombre }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-sm btn-outline-primary w-100">Asignar</button>
+            </form>
+        </div>
+        <div class="card p-3">
+            <form method="post" action="{{ url_for('eliminar_incidencia', inc_id=inc.id) }}"
+                  onsubmit="return confirm('Eliminar esta incidencia?')">
+                <button class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash"></i> Eliminar</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="card p-4">
+    <h6 class="mb-3">Notas ({{ notas|length }})</h6>
+    {% for n in notas %}
+    <div class="border-start border-3 border-primary ps-3 mb-3">
+        <div class="small text-muted">{{ n.autor or 'Sistema' }} - {{ n.creado_en }}</div>
+        <p class="mb-0">{{ n.contenido }}</p>
+    </div>
+    {% endfor %}
+    <hr>
+    <form method="post" action="{{ url_for('agregar_nota', inc_id=inc.id) }}">
+        <div class="mb-2">
+            <input type="text" name="autor" class="form-control form-control-sm" placeholder="Tu nombre (opcional)">
+        </div>
+        <div class="mb-2">
+            <textarea name="contenido" class="form-control" rows="2" placeholder="Escribir nota..." required></textarea>
+        </div>
+        <button class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Agregar nota</button>
+    </form>
+</div>
+{% endblock %}

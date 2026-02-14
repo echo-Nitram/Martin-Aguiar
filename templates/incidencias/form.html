@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar' if incidencia else 'Nueva' }} Incidencia{% endblock %}
+{% block contenido %}
+<h4 class="mb-4">{{ 'Editar' if incidencia else 'Nueva' }} Incidencia</h4>
+
+<div class="card p-4">
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">Titulo *</label>
+            <input type="text" name="titulo" class="form-control" required
+                   value="{{ incidencia.titulo if incidencia else '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Descripcion</label>
+            <textarea name="descripcion" class="form-control" rows="3">{{ incidencia.descripcion if incidencia else '' }}</textarea>
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">Prioridad</label>
+                <select name="prioridad" class="form-select">
+                    {% for p in prioridades %}
+                    <option value="{{ p }}" {{ 'selected' if incidencia and incidencia.prioridad == p }}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Categoria</label>
+                <select name="categoria" class="form-select">
+                    <option value="">-- Ninguna --</option>
+                    {% for c in categorias %}
+                    <option value="{{ c }}" {{ 'selected' if incidencia and incidencia.categoria == c }}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label class="form-label">Cliente</label>
+                <select name="cliente_id" class="form-select">
+                    <option value="">-- Sin cliente --</option>
+                    {% for c in clientes %}
+                    <option value="{{ c.id }}" {{ 'selected' if incidencia and incidencia.cliente_id == c.id }}>{{ c.nombre }}{% if c.empresa %} ({{ c.empresa }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Tecnico asignado</label>
+                <select name="tecnico_id" class="form-select">
+                    <option value="">-- Sin asignar --</option>
+                    {% for t in tecnicos %}
+                    <option value="{{ t.id }}" {{ 'selected' if incidencia and incidencia.tecnico_id == t.id }}>{{ t.nombre }}{% if t.especialidad %} ({{ t.especialidad }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <a href="{{ url_for('lista_incidencias') }}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

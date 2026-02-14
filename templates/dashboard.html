@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block titulo %}Dashboard - Soporte Tecnico{% endblock %}
+{% block contenido %}
+<h4 class="mb-4">Dashboard</h4>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card stat-card text-center p-3">
+            <div class="fs-2 fw-bold text-primary">{{ resumen.total_incidencias }}</div>
+            <small class="text-muted">Total incidencias</small>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card text-center p-3">
+            <div class="fs-2 fw-bold text-warning">{{ resumen.abiertas }}</div>
+            <small class="text-muted">Abiertas</small>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card text-center p-3">
+            <div class="fs-2 fw-bold text-info">{{ resumen.total_clientes }}</div>
+            <small class="text-muted">Clientes</small>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card stat-card text-center p-3">
+            <div class="fs-2 fw-bold text-success">{{ resumen.total_tecnicos }}</div>
+            <small class="text-muted">Tecnicos</small>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h6 class="mb-3">Por estado</h6>
+            {% for estado, total in resumen.por_estado.items() %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="badge bg-{{ estado_color.get(estado, 'secondary') }}">{{ estado }}</span>
+                <span class="fw-bold">{{ total }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3">
+            <h6 class="mb-3">Por prioridad</h6>
+            {% for prioridad, total in resumen.por_prioridad.items() %}
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="badge bg-{{ prioridad_color.get(prioridad, 'secondary') }}">{{ prioridad }}</span>
+                <span class="fw-bold">{{ total }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="card p-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Incidencias recientes</h6>
+        <a href="{{ url_for('lista_incidencias') }}" class="btn btn-sm btn-outline-primary">Ver todas</a>
+    </div>
+    {% if recientes %}
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>#</th><th>Titulo</th><th>Estado</th><th>Prioridad</th><th>Cliente</th></tr></thead>
+            <tbody>
+            {% for i in recientes %}
+            <tr style="cursor:pointer" onclick="location.href='{{ url_for('detalle_incidencia', inc_id=i.id) }}'">
+                <td>{{ i.id }}</td>
+                <td>{{ i.titulo }}</td>
+                <td><span class="badge bg-{{ estado_color.get(i.estado, 'secondary') }}">{{ i.estado }}</span></td>
+                <td><span class="badge bg-{{ prioridad_color.get(i.prioridad, 'secondary') }}">{{ i.prioridad }}</span></td>
+                <td>{{ i.cliente_nombre or '-' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No hay incidencias aun. <a href="{{ url_for('nueva_incidencia') }}">Crear una</a></p>
+    {% endif %}
+</div>
+{% endblock %}

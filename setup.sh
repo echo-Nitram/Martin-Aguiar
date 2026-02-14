@@ -7,6 +7,17 @@ echo "=== Cargando datos de ejemplo ==="
 python seed.py
 
 echo ""
-echo "=== Listo! Iniciando el sistema ==="
+echo "=== Que deseas iniciar? ==="
+echo "1) Interfaz web (navegador)"
+echo "2) Interfaz CLI (terminal)"
 echo ""
-python main.py
+read -p "Opcion [1]: " opcion
+
+if [ "$opcion" = "2" ]; then
+    python main.py
+else
+    echo ""
+    echo "=== Iniciando servidor web en http://localhost:5000 ==="
+    echo ""
+    python web.py
+fi

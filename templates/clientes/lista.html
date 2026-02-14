@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block titulo %}Clientes{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">Clientes</h4>
+    <a href="{{ url_for('nuevo_cliente') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nuevo</a>
+</div>
+
+{% if clientes %}
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>#</th><th>Nombre</th><th>Email</th><th>Telefono</th><th>Empresa</th><th>Acciones</th></tr></thead>
+            <tbody>
+            {% for c in clientes %}
+            <tr>
+                <td>{{ c.id }}</td>
+                <td>{{ c.nombre }}</td>
+                <td>{{ c.email or '-' }}</td>
+                <td>{{ c.telefono or '-' }}</td>
+                <td>{{ c.empresa or '-' }}</td>
+                <td>
+                    <a href="{{ url_for('editar_cliente', cliente_id=c.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                    <form method="post" action="{{ url_for('eliminar_cliente', cliente_id=c.id) }}" class="d-inline"
+                          onsubmit="return confirm('Eliminar cliente?')">
+                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card p-4 text-center text-muted">No hay clientes registrados.</div>
+{% endif %}
+{% endblock %}

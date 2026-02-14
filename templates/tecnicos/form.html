@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block titulo %}{{ 'Editar' if tecnico else 'Nuevo' }} Tecnico{% endblock %}
+{% block contenido %}
+<h4 class="mb-4">{{ 'Editar' if tecnico else 'Nuevo' }} Tecnico</h4>
+
+<div class="card p-4">
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">Nombre *</label>
+            <input type="text" name="nombre" class="form-control" required value="{{ tecnico.nombre if tecnico else '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Especialidad</label>
+            <input type="text" name="especialidad" class="form-control" value="{{ tecnico.especialidad if tecnico and tecnico.especialidad else '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-control" value="{{ tecnico.email if tecnico and tecnico.email else '' }}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Telefono</label>
+            <input type="text" name="telefono" class="form-control" value="{{ tecnico.telefono if tecnico and tecnico.telefono else '' }}">
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <a href="{{ url_for('lista_tecnicos') }}" class="btn btn-outline-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
