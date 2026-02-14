@@ -1,105 +1,174 @@
 {% extends "base.html" %}
-{% block titulo %}Reportes{% endblock %}
-{% block contenido %}
-<h4 class="mb-4">Reportes y Estadisticas</h4>
 
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-primary">{{ resumen.total_incidencias }}</div>
-            <small class="text-muted">Total</small>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-warning">{{ resumen.abiertas }}</div>
-            <small class="text-muted">Abiertas</small>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-info">{{ resumen.total_clientes }}</div>
-            <small class="text-muted">Clientes</small>
-        </div>
-    </div>
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-success">{{ resumen.total_tecnicos }}</div>
-            <small class="text-muted">Tecnicos</small>
-        </div>
-    </div>
-</div>
+{% block title %}Reportes - Sistema de Incidencias{% endblock %}
 
-<div class="row g-3 mb-4">
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Reportes</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-4"><i class="bi bi-bar-chart-line"></i> Reportes</h2>
+
+<div class="row g-4">
+    <!-- Doughnut: By State -->
     <div class="col-md-6">
-        <div class="card p-3">
-            <h6 class="mb-3">Incidencias por tecnico</h6>
-            {% if por_tecnico %}
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead><tr><th>Tecnico</th><th>Especialidad</th><th>Total</th><th>Abiertas</th></tr></thead>
-                    <tbody>
-                    {% for t in por_tecnico %}
-                    <tr>
-                        <td>{{ t.nombre }}</td>
-                        <td><small class="text-muted">{{ t.especialidad or '-' }}</small></td>
-                        <td>{{ t.total }}</td>
-                        <td><span class="badge bg-warning">{{ t.abiertas }}</span></td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Incidencias por Estado</h5>
             </div>
-            {% else %}
-            <p class="text-muted mb-0">Sin datos</p>
-            {% endif %}
+            <div class="card-body d-flex justify-content-center align-items-center">
+                <div style="max-width: 350px; width: 100%;">
+                    <canvas id="chartEstados"></canvas>
+                </div>
+            </div>
         </div>
     </div>
+
+    <!-- Doughnut: By Priority -->
     <div class="col-md-6">
-        <div class="card p-3">
-            <h6 class="mb-3">Incidencias por cliente</h6>
-            {% if por_cliente %}
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead><tr><th>Cliente</th><th>Empresa</th><th>Total</th><th>Abiertas</th></tr></thead>
-                    <tbody>
-                    {% for c in por_cliente %}
-                    <tr>
-                        <td>{{ c.nombre }}</td>
-                        <td><small class="text-muted">{{ c.empresa or '-' }}</small></td>
-                        <td>{{ c.total }}</td>
-                        <td><span class="badge bg-warning">{{ c.abiertas }}</span></td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart-fill"></i> Incidencias por Prioridad</h5>
             </div>
-            {% else %}
-            <p class="text-muted mb-0">Sin datos</p>
-            {% endif %}
+            <div class="card-body d-flex justify-content-center align-items-center">
+                <div style="max-width: 350px; width: 100%;">
+                    <canvas id="chartPrioridades"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bar: By Technician -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Incidencias por Tecnico</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="chartTecnicos" height="100"></canvas>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="card p-3">
-    <h6 class="mb-3">Incidencias por categoria</h6>
-    {% if por_categoria %}
-    <div class="table-responsive">
-        <table class="table table-sm mb-0">
-            <thead><tr><th>Categoria</th><th>Total</th><th>Abiertas</th></tr></thead>
-            <tbody>
-            {% for c in por_categoria %}
-            <tr>
-                <td>{{ c.categoria }}</td>
-                <td>{{ c.total }}</td>
-                <td><span class="badge bg-warning">{{ c.abiertas }}</span></td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+<!-- Summary table -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-table"></i> Resumen General</h5>
     </div>
-    {% else %}
-    <p class="text-muted mb-0">Sin datos</p>
-    {% endif %}
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Metrica</th>
+                        <th>Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Total de incidencias</td><td><strong>{{ resumen.total_incidencias|default(0) }}</strong></td></tr>
+                    <tr><td>Incidencias abiertas</td><td>{{ resumen.abiertas|default(0) }}</td></tr>
+                    <tr><td>Total de clientes</td><td>{{ resumen.total_clientes|default(0) }}</td></tr>
+                    <tr><td>Total de tecnicos</td><td>{{ resumen.total_tecnicos|default(0) }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Extract data from resumen dict passed by Jinja2
+const porEstado = {{ resumen.por_estado|default({})|tojson }};
+const porPrioridad = {{ resumen.por_prioridad|default({})|tojson }};
+
+const estadoColorMap = {
+    'abierta': '#0d6efd',
+    'en_progreso': '#ffc107',
+    'en_espera': '#6c757d',
+    'resuelta': '#198754',
+    'cerrada': '#212529'
+};
+const prioridadColorMap = {
+    'baja': '#0dcaf0',
+    'media': '#0d6efd',
+    'alta': '#ffc107',
+    'critica': '#dc3545'
+};
+
+// Doughnut chart: States
+new Chart(document.getElementById('chartEstados'), {
+    type: 'doughnut',
+    data: {
+        labels: Object.keys(porEstado),
+        datasets: [{
+            data: Object.values(porEstado),
+            backgroundColor: Object.keys(porEstado).map(k => estadoColorMap[k] || '#adb5bd'),
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+// Doughnut chart: Priorities
+new Chart(document.getElementById('chartPrioridades'), {
+    type: 'doughnut',
+    data: {
+        labels: Object.keys(porPrioridad),
+        datasets: [{
+            data: Object.values(porPrioridad),
+            backgroundColor: Object.keys(porPrioridad).map(k => prioridadColorMap[k] || '#adb5bd'),
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+// Bar chart: Technicians
+const porTecnico = {{ por_tecnico|default([])|tojson }};
+new Chart(document.getElementById('chartTecnicos'), {
+    type: 'bar',
+    data: {
+        labels: porTecnico.map(t => t.nombre),
+        datasets: [{
+            label: 'Total',
+            data: porTecnico.map(t => t.total),
+            backgroundColor: 'rgba(13, 110, 253, 0.7)',
+            borderColor: 'rgba(13, 110, 253, 1)',
+            borderWidth: 1
+        }, {
+            label: 'Abiertas',
+            data: porTecnico.map(t => t.abiertas),
+            backgroundColor: 'rgba(255, 193, 7, 0.7)',
+            borderColor: 'rgba(255, 193, 7, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { stepSize: 1 }
+            }
+        }
+    }
+});
+</script>
 {% endblock %}

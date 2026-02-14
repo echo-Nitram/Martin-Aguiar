@@ -66,6 +66,47 @@ def init_db(db_path=None):
             creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
         );
+
+        CREATE TABLE IF NOT EXISTS historial_ia (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incidencia_id INTEGER,
+            tipo TEXT NOT NULL,
+            respuesta TEXT NOT NULL,
+            contexto_usuario TEXT,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS chat_ia (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incidencia_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+            contenido TEXT NOT NULL,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            role TEXT DEFAULT 'tecnico' CHECK(role IN ('admin', 'tecnico')),
+            activo INTEGER DEFAULT 1,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS adjuntos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incidencia_id INTEGER NOT NULL,
+            nombre_archivo TEXT NOT NULL,
+            nombre_original TEXT NOT NULL,
+            mime_type TEXT,
+            tamano INTEGER,
+            subido_por TEXT,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
+        );
     """)
 
     conn.commit()

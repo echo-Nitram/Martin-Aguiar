@@ -1,84 +1,129 @@
 {% extends "base.html" %}
-{% block titulo %}Dashboard - Soporte Tecnico{% endblock %}
-{% block contenido %}
-<h4 class="mb-4">Dashboard</h4>
 
+{% block title %}Dashboard - Sistema de Incidencias{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active" aria-current="page">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<h2 class="mb-4"><i class="bi bi-speedometer2"></i> Dashboard</h2>
+
+<!-- Stat Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-primary">{{ resumen.total_incidencias }}</div>
-            <small class="text-muted">Total incidencias</small>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-start border-primary border-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted text-uppercase mb-1">Total Incidencias</h6>
+                        <h2 class="mb-0">{{ resumen.total_incidencias|default(0) }}</h2>
+                    </div>
+                    <i class="bi bi-exclamation-triangle text-primary" style="font-size: 2.5rem;"></i>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-warning">{{ resumen.abiertas }}</div>
-            <small class="text-muted">Abiertas</small>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-start border-warning border-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted text-uppercase mb-1">Abiertas</h6>
+                        <h2 class="mb-0">{{ resumen.abiertas|default(0) }}</h2>
+                    </div>
+                    <i class="bi bi-folder2-open text-warning" style="font-size: 2.5rem;"></i>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-info">{{ resumen.total_clientes }}</div>
-            <small class="text-muted">Clientes</small>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-start border-info border-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted text-uppercase mb-1">Clientes</h6>
+                        <h2 class="mb-0">{{ resumen.total_clientes|default(0) }}</h2>
+                    </div>
+                    <i class="bi bi-people text-info" style="font-size: 2.5rem;"></i>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
-        <div class="card stat-card text-center p-3">
-            <div class="fs-2 fw-bold text-success">{{ resumen.total_tecnicos }}</div>
-            <small class="text-muted">Tecnicos</small>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card border-start border-success border-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted text-uppercase mb-1">Tecnicos</h6>
+                        <h2 class="mb-0">{{ resumen.total_tecnicos|default(0) }}</h2>
+                    </div>
+                    <i class="bi bi-person-badge text-success" style="font-size: 2.5rem;"></i>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="card p-3">
-            <h6 class="mb-3">Por estado</h6>
-            {% for estado, total in resumen.por_estado.items() %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="badge bg-{{ estado_color.get(estado, 'secondary') }}">{{ estado }}</span>
-                <span class="fw-bold">{{ total }}</span>
-            </div>
-            {% endfor %}
+<!-- Recent Incidents -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Incidencias Recientes</h5>
+        <a href="{{ url_for('lista_incidencias') }}" class="btn btn-sm btn-outline-primary">
+            Ver todas <i class="bi bi-arrow-right"></i>
+        </a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Titulo</th>
+                        <th>Cliente</th>
+                        <th>Estado</th>
+                        <th>Prioridad</th>
+                        <th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in recientes %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('detalle_incidencia', inc_id=inc.id) }}">{{ inc.id }}</a>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('detalle_incidencia', inc_id=inc.id) }}" class="text-decoration-none">
+                                {{ inc.titulo|truncate(50) }}
+                            </a>
+                        </td>
+                        <td>{{ inc.cliente_nombre or '—' }}</td>
+                        <td>
+                            <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }}">{{ inc.estado }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }}">{{ inc.prioridad }}</span>
+                        </td>
+                        <td>
+                            <span title="{{ inc.creado_en }}">{{ inc.creado_en|hace }}</span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            No hay incidencias registradas.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card p-3">
-            <h6 class="mb-3">Por prioridad</h6>
-            {% for prioridad, total in resumen.por_prioridad.items() %}
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="badge bg-{{ prioridad_color.get(prioridad, 'secondary') }}">{{ prioridad }}</span>
-                <span class="fw-bold">{{ total }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<div class="card p-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="mb-0">Incidencias recientes</h6>
-        <a href="{{ url_for('lista_incidencias') }}" class="btn btn-sm btn-outline-primary">Ver todas</a>
-    </div>
-    {% if recientes %}
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead><tr><th>#</th><th>Titulo</th><th>Estado</th><th>Prioridad</th><th>Cliente</th></tr></thead>
-            <tbody>
-            {% for i in recientes %}
-            <tr style="cursor:pointer" onclick="location.href='{{ url_for('detalle_incidencia', inc_id=i.id) }}'">
-                <td>{{ i.id }}</td>
-                <td>{{ i.titulo }}</td>
-                <td><span class="badge bg-{{ estado_color.get(i.estado, 'secondary') }}">{{ i.estado }}</span></td>
-                <td><span class="badge bg-{{ prioridad_color.get(i.prioridad, 'secondary') }}">{{ i.prioridad }}</span></td>
-                <td>{{ i.cliente_nombre or '-' }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <p class="text-muted mb-0">No hay incidencias aun. <a href="{{ url_for('nueva_incidencia') }}">Crear una</a></p>
-    {% endif %}
 </div>
 {% endblock %}

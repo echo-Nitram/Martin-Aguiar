@@ -1,167 +1,499 @@
 {% extends "base.html" %}
-{% block titulo %}Incidencia #{{ inc.id }}{% endblock %}
-{% block contenido %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0">
-        <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }} me-2">{{ inc.estado }}</span>
-        #{{ inc.id }} - {{ inc.titulo }}
-    </h4>
-    <a href="{{ url_for('lista_incidencias') }}" class="btn btn-outline-secondary btn-sm">Volver</a>
-</div>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-8">
-        <div class="card p-4">
-            <h6>Descripcion</h6>
-            <p class="mb-3">{{ inc.descripcion or 'Sin descripcion' }}</p>
-            <div class="row g-2 text-muted small">
-                <div class="col-6"><strong>Prioridad:</strong> <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }}">{{ inc.prioridad }}</span></div>
-                <div class="col-6"><strong>Categoria:</strong> {{ inc.categoria or '-' }}</div>
-                <div class="col-6"><strong>Cliente:</strong> {{ inc.cliente_nombre or '-' }}</div>
-                <div class="col-6"><strong>Tecnico:</strong> {{ inc.tecnico_nombre or 'Sin asignar' }}</div>
-                <div class="col-6"><strong>Creada:</strong> {{ inc.creado_en }}</div>
-                <div class="col-6"><strong>Actualizada:</strong> {{ inc.actualizado_en }}</div>
-                {% if inc.cerrado_en %}
-                <div class="col-12"><strong>Cerrada:</strong> {{ inc.cerrado_en }}</div>
+{% block title %}Incidencia #{{ inc.id }} - Sistema de Incidencias{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-messages { max-height: 400px; overflow-y: auto; }
+    .chat-bubble { max-width: 80%; }
+    .chat-bubble.user { background-color: #d1ecf1; }
+    .chat-bubble.assistant { background-color: #f8f9fa; }
+    .ia-result-area { min-height: 120px; }
+    .attachment-item { border-left: 3px solid #0d6efd; }
+    .note-card { border-left: 3px solid #ffc107; }
+</style>
+{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('lista_incidencias') }}">Incidencias</a></li>
+        <li class="breadcrumb-item active" aria-current="page">#{{ inc.id }} - {{ inc.titulo|truncate(40) }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- ===== MAIN CONTENT (Left) ===== -->
+    <div class="col-lg-8">
+        <!-- Incident Header -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> #{{ inc.id }} — {{ inc.titulo }}
+                </h4>
+                <div>
+                    <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }} fs-6">{{ inc.estado }}</span>
+                    <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }} fs-6">{{ inc.prioridad }}</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <small class="text-muted">Cliente</small><br>
+                        <strong>{{ inc.cliente_nombre or '—' }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Tecnico</small><br>
+                        <strong>{{ inc.tecnico_nombre or 'Sin asignar' }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Categoria</small><br>
+                        <strong>{{ inc.categoria|default('Sin categoria') }}</strong>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <small class="text-muted">Creada</small><br>
+                        <span title="{{ inc.creado_en }}">{{ inc.creado_en|hace }}</span>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Actualizada</small><br>
+                        <span title="{{ inc.actualizado_en }}">{{ inc.actualizado_en|hace }}</span>
+                    </div>
+                    {% if inc.cerrado_en %}
+                    <div class="col-md-4">
+                        <small class="text-muted">Cerrada</small><br>
+                        <span title="{{ inc.cerrado_en }}">{{ inc.cerrado_en|hace }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <hr>
+                <h6>Descripcion</h6>
+                <p class="mb-0" style="white-space: pre-wrap;">{{ inc.descripcion or 'Sin descripcion.' }}</p>
+            </div>
+        </div>
+
+        <!-- ===== ATTACHMENTS SECTION ===== -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-paperclip"></i> Adjuntos ({{ adjuntos|length }})</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('subir_adjunto', inc_id=inc.id) }}"
+                      enctype="multipart/form-data" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group">
+                        <input type="file" class="form-control" name="archivo" required>
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-upload"></i> Subir
+                        </button>
+                    </div>
+                </form>
+                {% if adjuntos %}
+                <ul class="list-group">
+                    {% for adj in adjuntos %}
+                    <li class="list-group-item attachment-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-file-earmark"></i>
+                            <a href="{{ url_for('descargar_adjunto', adjunto_id=adj.id) }}">{{ adj.nombre_original }}</a>
+                            <small class="text-muted ms-2">
+                                <span title="{{ adj.creado_en }}">{{ adj.creado_en|hace }}</span>
+                            </small>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">No hay adjuntos.</p>
                 {% endif %}
             </div>
         </div>
 
-        {% if ia_disponible %}
-        <div class="card p-3 mt-3">
-            <h6 class="mb-2"><i class="bi bi-stars"></i> Asistente IA</h6>
-            <div class="d-flex flex-wrap gap-2 mb-3">
-                <button class="btn btn-sm btn-outline-info" onclick="iaAction('respuesta')">
-                    <i class="bi bi-chat-dots"></i> Redactar respuesta
-                </button>
-                <button class="btn btn-sm btn-outline-info" onclick="iaAction('diagnostico')">
-                    <i class="bi bi-search"></i> Diagnostico
-                </button>
-                <button class="btn btn-sm btn-outline-info" onclick="iaAction('resumen')">
-                    <i class="bi bi-file-text"></i> Resumir
-                </button>
+        <!-- ===== NOTES SECTION ===== -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> Notas ({{ notas|length }})</h5>
             </div>
-            <div id="ia-resultado" class="d-none">
-                <div id="ia-loading" class="text-center py-3 d-none">
-                    <div class="spinner-border spinner-border-sm text-info" role="status"></div>
-                    <span class="ms-2 text-muted">Pensando...</span>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('agregar_nota', inc_id=inc.id) }}" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-2">
+                        <textarea class="form-control" name="contenido" rows="3"
+                                  placeholder="Escribe una nota..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg"></i> Agregar Nota
+                    </button>
+                </form>
+                <hr>
+                {% for nota in notas %}
+                <div class="card note-card mb-2">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">
+                                <i class="bi bi-person"></i> {{ nota.autor or 'Sistema' }}
+                            </small>
+                            <small class="text-muted">
+                                <span title="{{ nota.creado_en }}">{{ nota.creado_en|hace }}</span>
+                            </small>
+                        </div>
+                        <p class="mb-0 mt-1" style="white-space: pre-wrap;">{{ nota.contenido }}</p>
+                    </div>
                 </div>
-                <div id="ia-contenido" class="d-none">
-                    <div class="bg-light rounded p-3" style="white-space: pre-wrap;" id="ia-texto"></div>
-                    <div class="mt-2 d-flex gap-2">
-                        <button class="btn btn-sm btn-primary" onclick="usarComoNota()">
-                            <i class="bi bi-plus"></i> Usar como nota
+                {% else %}
+                <p class="text-muted">No hay notas todavia.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- ===== AI SECTION ===== -->
+        <div class="card mb-3">
+            <div class="card-header bg-info bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-robot"></i> Asistente IA</h5>
+            </div>
+            <div class="card-body">
+                {% if ia_disponible %}
+                <!-- Context input -->
+                <div class="mb-3">
+                    <label for="iaContexto" class="form-label fw-bold">
+                        Que quieres transmitir al cliente?
+                    </label>
+                    <textarea class="form-control" id="iaContexto" rows="3"
+                              placeholder="Describe lo que quieres comunicar al cliente, el diagnostico realizado, etc."></textarea>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="d-flex gap-2 mb-3 flex-wrap">
+                    <button class="btn btn-outline-primary" id="btnIaRespuesta">
+                        <i class="bi bi-chat-dots"></i> Generar Respuesta
+                    </button>
+                    <button class="btn btn-outline-warning" id="btnIaDiagnostico">
+                        <i class="bi bi-search"></i> Diagnostico
+                    </button>
+                    <button class="btn btn-outline-success" id="btnIaResumen">
+                        <i class="bi bi-card-text"></i> Resumen
+                    </button>
+                </div>
+
+                <!-- Loading spinner -->
+                <div id="iaLoading" class="text-center py-3 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Procesando...</span>
+                    </div>
+                    <p class="text-muted mt-2">La IA esta procesando tu solicitud...</p>
+                </div>
+
+                <!-- Result area -->
+                <div id="iaResultado" class="d-none">
+                    <label class="form-label fw-bold">Resultado de la IA:</label>
+                    <textarea class="form-control ia-result-area" id="iaTextoResultado" rows="6"></textarea>
+                    <div class="d-flex gap-2 mt-2">
+                        <button class="btn btn-primary btn-sm" id="btnIaGuardarNota">
+                            <i class="bi bi-journal-plus"></i> Guardar como Nota
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="copiarIA()">
+                        <button class="btn btn-outline-secondary btn-sm" id="btnIaCopiar">
                             <i class="bi bi-clipboard"></i> Copiar
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" id="btnIaDescartar">
+                            <i class="bi bi-x-lg"></i> Descartar
                         </button>
                     </div>
                 </div>
-                <div id="ia-error" class="alert alert-danger d-none mb-0"></div>
+                {% else %}
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-exclamation-circle"></i>
+                    El asistente IA no esta disponible. Verifica la configuracion de la API.
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
+
+        <!-- ===== CHAT PANEL (Accordion) ===== -->
+        <div class="accordion mb-3" id="accordionChat">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapseChat"
+                            aria-expanded="false" aria-controls="collapseChat">
+                        <i class="bi bi-chat-left-text me-2"></i> Chat con IA
+                    </button>
+                </h2>
+                <div id="collapseChat" class="accordion-collapse collapse" data-bs-parent="#accordionChat">
+                    <div class="accordion-body">
+                        {% if ia_disponible %}
+                        <div id="chatMessages" class="chat-messages border rounded p-3 mb-3 bg-light">
+                            <p class="text-muted text-center" id="chatEmpty">
+                                <i class="bi bi-chat-dots"></i> Inicia una conversacion con la IA sobre esta incidencia.
+                            </p>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="chatInput"
+                                   placeholder="Escribe tu mensaje..." autocomplete="off">
+                            <button class="btn btn-primary" id="btnChatSend">
+                                <i class="bi bi-send"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2 text-end">
+                            <button class="btn btn-sm btn-outline-danger" id="btnChatClear">
+                                <i class="bi bi-trash"></i> Limpiar chat
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning mb-0">
+                            Chat IA no disponible.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== AI HISTORY (Accordion) ===== -->
+        <div class="accordion mb-3" id="accordionHistorialIA">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapseHistorialIA"
+                            aria-expanded="false" aria-controls="collapseHistorialIA">
+                        <i class="bi bi-clock-history me-2"></i> Historial de IA ({{ historial_ia|length }})
+                    </button>
+                </h2>
+                <div id="collapseHistorialIA" class="accordion-collapse collapse" data-bs-parent="#accordionHistorialIA">
+                    <div class="accordion-body">
+                        {% for item in historial_ia %}
+                        <div class="card mb-2">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between">
+                                    <span class="badge bg-secondary">{{ item.tipo }}</span>
+                                    <small class="text-muted">
+                                        <span title="{{ item.creado_en }}">{{ item.creado_en|hace }}</span>
+                                    </small>
+                                </div>
+                                <p class="mb-0 mt-1 small" style="white-space: pre-wrap;">{{ item.respuesta|truncate(300) }}</p>
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">No hay historial de IA.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="col-md-4">
-        <div class="card p-3 mb-3">
-            <h6 class="mb-2">Cambiar estado</h6>
-            <form method="post" action="{{ url_for('cambiar_estado', inc_id=inc.id) }}">
-                <select name="estado" class="form-select form-select-sm mb-2">
-                    {% for e in estados %}
-                    <option value="{{ e }}" {{ 'selected' if inc.estado == e }}>{{ e }}</option>
-                    {% endfor %}
-                </select>
-                <button class="btn btn-sm btn-warning w-100">Actualizar</button>
-            </form>
-        </div>
-        <div class="card p-3 mb-3">
-            <h6 class="mb-2">Asignar tecnico</h6>
-            <form method="post" action="{{ url_for('asignar_tecnico', inc_id=inc.id) }}">
-                <select name="tecnico_id" class="form-select form-select-sm mb-2">
-                    <option value="">-- Sin asignar --</option>
-                    {% for t in tecnicos %}
-                    <option value="{{ t.id }}" {{ 'selected' if inc.tecnico_id == t.id }}>{{ t.nombre }}</option>
-                    {% endfor %}
-                </select>
-                <button class="btn btn-sm btn-outline-primary w-100">Asignar</button>
-            </form>
-        </div>
-        <div class="card p-3">
-            <form method="post" action="{{ url_for('eliminar_incidencia', inc_id=inc.id) }}"
-                  onsubmit="return confirm('Eliminar esta incidencia?')">
-                <button class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash"></i> Eliminar</button>
-            </form>
+
+    <!-- ===== SIDEBAR (Right) ===== -->
+    <div class="col-lg-4">
+        <div class="sidebar-card">
+            <!-- Change State -->
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0"><i class="bi bi-arrow-repeat"></i> Cambiar Estado</h6></div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('cambiar_estado', inc_id=inc.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select class="form-select mb-2" name="estado">
+                            {% for e in estados %}
+                            <option value="{{ e }}" {{ 'selected' if inc.estado == e }}>
+                                {{ e|replace('_',' ')|capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            <i class="bi bi-check-lg"></i> Actualizar Estado
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Assign Technician -->
+            <div class="card mb-3">
+                <div class="card-header"><h6 class="mb-0"><i class="bi bi-person-badge"></i> Asignar Tecnico</h6></div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('asignar_tecnico', inc_id=inc.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <select class="form-select mb-2" name="tecnico_id">
+                            <option value="">Sin asignar</option>
+                            {% for t in tecnicos %}
+                            <option value="{{ t.id }}" {{ 'selected' if inc.tecnico_id == t.id }}>
+                                {{ t.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-info btn-sm w-100">
+                            <i class="bi bi-person-check"></i> Asignar
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Delete -->
+            <div class="card border-danger">
+                <div class="card-header bg-danger bg-opacity-10">
+                    <h6 class="mb-0 text-danger"><i class="bi bi-trash"></i> Zona de Peligro</h6>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('eliminar_incidencia', inc_id=inc.id) }}"
+                          onsubmit="return confirm('Estas seguro de eliminar esta incidencia? Esta accion no se puede deshacer.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger btn-sm w-100">
+                            <i class="bi bi-trash"></i> Eliminar Incidencia
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
-<div class="card p-4">
-    <h6 class="mb-3">Notas ({{ notas|length }})</h6>
-    {% for n in notas %}
-    <div class="border-start border-3 border-primary ps-3 mb-3">
-        <div class="small text-muted">{{ n.autor or 'Sistema' }} - {{ n.creado_en }}</div>
-        <p class="mb-0">{{ n.contenido }}</p>
-    </div>
-    {% endfor %}
-    <hr>
-    <form method="post" action="{{ url_for('agregar_nota', inc_id=inc.id) }}" id="form-nota">
-        <div class="mb-2">
-            <input type="text" name="autor" id="nota-autor" class="form-control form-control-sm" placeholder="Tu nombre (opcional)">
-        </div>
-        <div class="mb-2">
-            <textarea name="contenido" id="nota-contenido" class="form-control" rows="2" placeholder="Escribir nota..." required></textarea>
-        </div>
-        <button class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Agregar nota</button>
-    </form>
-</div>
-
-{% if ia_disponible %}
+{% block extra_js %}
 <script>
-function iaAction(tipo) {
-    const resultado = document.getElementById('ia-resultado');
-    const loading = document.getElementById('ia-loading');
-    const contenido = document.getElementById('ia-contenido');
-    const error = document.getElementById('ia-error');
-    const texto = document.getElementById('ia-texto');
+const INC_ID = {{ inc.id }};
+const CSRF = document.querySelector('meta[name=csrf-token]').content;
+const headers = { 'X-CSRFToken': CSRF };
 
-    resultado.classList.remove('d-none');
-    loading.classList.remove('d-none');
-    contenido.classList.add('d-none');
-    error.classList.add('d-none');
+/* ===== IA Actions ===== */
+const iaContexto = document.getElementById('iaContexto');
+const iaLoading = document.getElementById('iaLoading');
+const iaResultado = document.getElementById('iaResultado');
+const iaTexto = document.getElementById('iaTextoResultado');
 
-    fetch("{{ url_for('ia_respuesta', inc_id=inc.id) }}".replace('/respuesta', '/' + tipo), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'}
-    })
-    .then(r => r.json())
-    .then(data => {
-        loading.classList.add('d-none');
-        if (data.error) {
-            error.textContent = data.error;
-            error.classList.remove('d-none');
-        } else {
-            texto.textContent = data.resultado;
-            contenido.classList.remove('d-none');
-        }
-    })
-    .catch(err => {
-        loading.classList.add('d-none');
-        error.textContent = 'Error de conexion: ' + err.message;
-        error.classList.remove('d-none');
+function showIaLoading() {
+    iaLoading.classList.remove('d-none');
+    iaResultado.classList.add('d-none');
+}
+function showIaResult(text) {
+    iaLoading.classList.add('d-none');
+    iaResultado.classList.remove('d-none');
+    iaTexto.value = text;
+}
+function hideIaLoading() {
+    iaLoading.classList.add('d-none');
+}
+
+// Generate Response
+document.getElementById('btnIaRespuesta')?.addEventListener('click', function() {
+    const contexto = iaContexto.value.trim();
+    if (!contexto) { alert('Escribe que quieres transmitir al cliente.'); return; }
+    showIaLoading();
+    const fd = new FormData();
+    fd.append('contexto', contexto);
+    fetch(`/incidencias/${INC_ID}/ia/respuesta`, { method: 'POST', headers, body: fd })
+        .then(r => r.json())
+        .then(data => showIaResult(data.resultado || data.error))
+        .catch(e => { hideIaLoading(); alert('Error: ' + e.message); });
+});
+
+// Diagnostic
+document.getElementById('btnIaDiagnostico')?.addEventListener('click', function() {
+    showIaLoading();
+    fetch(`/incidencias/${INC_ID}/ia/diagnostico`, { method: 'POST', headers })
+        .then(r => r.json())
+        .then(data => showIaResult(data.resultado || data.error))
+        .catch(e => { hideIaLoading(); alert('Error: ' + e.message); });
+});
+
+// Summary
+document.getElementById('btnIaResumen')?.addEventListener('click', function() {
+    showIaLoading();
+    fetch(`/incidencias/${INC_ID}/ia/resumen`, { method: 'POST', headers })
+        .then(r => r.json())
+        .then(data => showIaResult(data.resultado || data.error))
+        .catch(e => { hideIaLoading(); alert('Error: ' + e.message); });
+});
+
+// Save as Note
+document.getElementById('btnIaGuardarNota')?.addEventListener('click', function() {
+    const contenido = iaTexto.value.trim();
+    if (!contenido) return;
+    const fd = new FormData();
+    fd.append('contenido', '[IA] ' + contenido);
+    fd.append('csrf_token', CSRF);
+    fetch(`/incidencias/${INC_ID}/nota`, { method: 'POST', headers, body: fd })
+        .then(r => { if (r.ok || r.redirected) location.reload(); else alert('Error al guardar nota.'); })
+        .catch(e => alert('Error: ' + e.message));
+});
+
+// Copy
+document.getElementById('btnIaCopiar')?.addEventListener('click', function() {
+    navigator.clipboard.writeText(iaTexto.value).then(() => {
+        this.innerHTML = '<i class="bi bi-check"></i> Copiado';
+        setTimeout(() => { this.innerHTML = '<i class="bi bi-clipboard"></i> Copiar'; }, 2000);
     });
+});
+
+// Discard
+document.getElementById('btnIaDescartar')?.addEventListener('click', function() {
+    iaResultado.classList.add('d-none');
+    iaTexto.value = '';
+});
+
+/* ===== CHAT ===== */
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatEmpty = document.getElementById('chatEmpty');
+
+function addChatBubble(role, text) {
+    if (chatEmpty) chatEmpty.remove();
+    const div = document.createElement('div');
+    div.className = `d-flex mb-2 ${role === 'user' ? 'justify-content-end' : 'justify-content-start'}`;
+    div.innerHTML = `
+        <div class="chat-bubble ${role} rounded p-2">
+            <small class="fw-bold">${role === 'user' ? '<i class="bi bi-person"></i> Tu' : '<i class="bi bi-robot"></i> IA'}</small>
+            <p class="mb-0 small" style="white-space:pre-wrap;">${text}</p>
+        </div>`;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function usarComoNota() {
-    const texto = document.getElementById('ia-texto').textContent;
-    document.getElementById('nota-contenido').value = texto;
-    document.getElementById('nota-autor').value = 'IA Asistente';
-    document.getElementById('form-nota').scrollIntoView({behavior: 'smooth'});
+function sendChatMessage() {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    addChatBubble('user', msg);
+    chatInput.value = '';
+    chatInput.disabled = true;
+
+    const fd = new FormData();
+    fd.append('mensaje', msg);
+    fetch(`/incidencias/${INC_ID}/ia/chat`, { method: 'POST', headers, body: fd })
+        .then(r => r.json())
+        .then(data => {
+            addChatBubble('assistant', data.resultado || data.error || 'Sin respuesta.');
+        })
+        .catch(e => addChatBubble('assistant', 'Error: ' + e.message))
+        .finally(() => { chatInput.disabled = false; chatInput.focus(); });
 }
 
-function copiarIA() {
-    const texto = document.getElementById('ia-texto').textContent;
-    navigator.clipboard.writeText(texto);
-}
+document.getElementById('btnChatSend')?.addEventListener('click', sendChatMessage);
+chatInput?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+});
+
+// Load chat history on expand
+document.getElementById('collapseChat')?.addEventListener('shown.bs.collapse', function() {
+    fetch(`/incidencias/${INC_ID}/ia/chat/historial`, { headers: { 'X-CSRFToken': CSRF } })
+        .then(r => r.json())
+        .then(data => {
+            if (data.mensajes && data.mensajes.length > 0) {
+                chatMessages.innerHTML = '';
+                data.mensajes.forEach(m => addChatBubble(m.role, m.contenido));
+            }
+        })
+        .catch(() => {});
+});
+
+// Clear chat
+document.getElementById('btnChatClear')?.addEventListener('click', function() {
+    if (!confirm('Limpiar el historial del chat?')) return;
+    fetch(`/incidencias/${INC_ID}/ia/chat/limpiar`, { method: 'POST', headers })
+        .then(r => {
+            if (r.ok) {
+                chatMessages.innerHTML = '<p class="text-muted text-center" id="chatEmpty"><i class="bi bi-chat-dots"></i> Inicia una conversacion con la IA sobre esta incidencia.</p>';
+            }
+        })
+        .catch(e => alert('Error: ' + e.message));
+});
 </script>
-{% endif %}
 {% endblock %}

@@ -1,30 +1,106 @@
 """Modulo de integracion con IA (Claude API) para asistencia en incidencias."""
 
 import os
+import hashlib
+import time
+import logging
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 CATEGORIAS_VALIDAS = ["hardware", "software", "red", "email", "seguridad", "otro"]
 PRIORIDADES_VALIDAS = ["baja", "media", "alta", "critica"]
 
+# ── Excepciones IA ──────────────────────────────────────────────────────
+
+
+class IAError(Exception):
+    """Error base del modulo IA."""
+    pass
+
+
+class IAConfigError(IAError):
+    """API key faltante o invalida."""
+    pass
+
+
+class IALimitError(IAError):
+    """Limite de uso alcanzado."""
+    pass
+
+
+# ── Cache simple en memoria ─────────────────────────────────────────────
+
+_cache = {}
+CACHE_TTL = 300  # 5 minutos
+
+
+def _cache_key(*args):
+    return hashlib.md5(str(args).encode()).hexdigest()
+
+
+# ── Cliente y llamada base ──────────────────────────────────────────────
 
 def _get_client():
-    return anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise IAConfigError(
+            "ANTHROPIC_API_KEY no esta configurada. Agrega tu clave en el archivo .env"
+        )
+    return anthropic.Anthropic(api_key=api_key)
 
 
 def _ask(system_prompt, user_prompt):
     """Envia un mensaje a Claude y retorna la respuesta como texto."""
-    client = _get_client()
-    message = client.messages.create(
-        model="claude-sonnet-4-5-20250929",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return message.content[0].text
+    try:
+        client = _get_client()
+        message = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return message.content[0].text
+    except IAConfigError:
+        raise
+    except anthropic.RateLimitError:
+        raise IALimitError(
+            "Limite de uso de la API alcanzado. Intenta de nuevo en unos minutos."
+        )
+    except anthropic.AuthenticationError:
+        raise IAConfigError("La clave de API no es valida. Revisa tu archivo .env")
+    except anthropic.APIConnectionError:
+        raise IAError(
+            "No se pudo conectar con la API de Claude. Verifica tu conexion a internet."
+        )
+    except Exception as e:
+        logger.exception("Error inesperado en la API de IA")
+        raise IAError(f"Error inesperado: {str(e)}")
 
 
-def redactar_respuesta(incidencia, notas):
-    """Genera una respuesta profesional para enviar al cliente."""
+def _ask_cached(system_prompt, user_prompt):
+    """Igual que _ask pero con cache por TTL."""
+    key = _cache_key(system_prompt, user_prompt)
+    now = time.time()
+    if key in _cache:
+        result, ts = _cache[key]
+        if now - ts < CACHE_TTL:
+            return result
+    result = _ask(system_prompt, user_prompt)
+    _cache[key] = (result, now)
+    return result
+
+
+# ── Funciones de IA ─────────────────────────────────────────────────────
+
+def redactar_respuesta(incidencia, notas, contexto_usuario=None):
+    """Genera una respuesta profesional para enviar al cliente.
+
+    Args:
+        incidencia: dict con datos de la incidencia
+        notas: lista de notas de la incidencia
+        contexto_usuario: texto opcional con lo que el usuario quiere transmitir
+    """
     historial = ""
     for n in notas:
         historial += f"- {n['autor'] or 'Sistema'}: {n['contenido']}\n"
@@ -42,8 +118,20 @@ def redactar_respuesta(incidencia, notas):
         f"Prioridad: {incidencia['prioridad']}\n"
         f"Categoria: {incidencia.get('categoria') or 'Sin categoria'}\n"
         f"\nHistorial de notas:\n{historial or 'Sin notas previas'}\n"
-        f"\nRedacta una respuesta profesional para actualizar al cliente sobre el estado de su incidencia."
     )
+
+    if contexto_usuario:
+        user += (
+            f"\nINSTRUCCIONES DEL AGENTE DE SOPORTE:\n"
+            f"El agente quiere transmitir lo siguiente al cliente: {contexto_usuario}\n"
+            f"Incorpora esta informacion en la respuesta de forma profesional y natural."
+        )
+    else:
+        user += (
+            "\nRedacta una respuesta profesional para actualizar al cliente "
+            "sobre el estado de su incidencia."
+        )
+
     return _ask(system, user)
 
 
@@ -99,7 +187,7 @@ def diagnosticar(incidencia, notas):
         f"Prioridad: {incidencia['prioridad']}\n"
         f"\nHistorial de notas:\n{historial or 'Sin notas previas'}"
     )
-    return _ask(system, user)
+    return _ask_cached(system, user)
 
 
 def resumir_incidencia(incidencia, notas):
@@ -124,4 +212,66 @@ def resumir_incidencia(incidencia, notas):
         f"\nHistorial completo:\n{historial or 'Sin notas'}\n"
         f"\nGenera un resumen ejecutivo."
     )
-    return _ask(system, user)
+    return _ask_cached(system, user)
+
+
+def chat_incidencia(incidencia, notas, historial_chat, mensaje_usuario):
+    """Chat interactivo sobre una incidencia especifica."""
+    historial_notas = ""
+    for n in notas:
+        historial_notas += (
+            f"- [{n['creado_en']}] {n['autor'] or 'Sistema'}: {n['contenido']}\n"
+        )
+
+    system = (
+        "Eres un asistente experto en soporte tecnico IT. "
+        "Ayudas al agente de soporte a resolver incidencias, responder consultas "
+        "y tomar decisiones sobre como proceder. "
+        "Tienes acceso al contexto completo de la incidencia. "
+        "Responde en espanol. Se conciso y practico."
+    )
+
+    contexto = (
+        f"[CONTEXTO DE LA INCIDENCIA]\n"
+        f"Incidencia #{incidencia['id']}: {incidencia['titulo']}\n"
+        f"Descripcion: {incidencia.get('descripcion') or 'Sin descripcion'}\n"
+        f"Estado: {incidencia['estado']} | Prioridad: {incidencia['prioridad']}\n"
+        f"Categoria: {incidencia.get('categoria') or 'Sin categoria'}\n"
+        f"Cliente: {incidencia.get('cliente_nombre') or 'No asignado'}\n"
+        f"Tecnico: {incidencia.get('tecnico_nombre') or 'No asignado'}\n"
+        f"\nNotas:\n{historial_notas or 'Sin notas'}"
+    )
+
+    messages = [
+        {"role": "user", "content": contexto},
+        {
+            "role": "assistant",
+            "content": "Entendido. Tengo el contexto de la incidencia. ¿En que puedo ayudarte?",
+        },
+    ]
+
+    for msg in historial_chat:
+        messages.append({"role": msg["role"], "content": msg["contenido"]})
+
+    messages.append({"role": "user", "content": mensaje_usuario})
+
+    try:
+        client = _get_client()
+        response = client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=1024,
+            system=system,
+            messages=messages,
+        )
+        return response.content[0].text
+    except IAConfigError:
+        raise
+    except anthropic.RateLimitError:
+        raise IALimitError("Limite de uso alcanzado. Intenta de nuevo en unos minutos.")
+    except anthropic.AuthenticationError:
+        raise IAConfigError("La clave de API no es valida.")
+    except anthropic.APIConnectionError:
+        raise IAError("No se pudo conectar con la API de Claude.")
+    except Exception as e:
+        logger.exception("Error inesperado en chat IA")
+        raise IAError(f"Error inesperado: {str(e)}")

@@ -1,30 +1,69 @@
 {% extends "base.html" %}
-{% block titulo %}{{ 'Editar' if cliente else 'Nuevo' }} Cliente{% endblock %}
-{% block contenido %}
-<h4 class="mb-4">{{ 'Editar' if cliente else 'Nuevo' }} Cliente</h4>
 
-<div class="card p-4">
-    <form method="post">
-        <div class="mb-3">
-            <label class="form-label">Nombre *</label>
-            <input type="text" name="nombre" class="form-control" required value="{{ cliente.nombre if cliente else '' }}">
+{% block title %}{{ 'Editar' if cliente else 'Nuevo' }} Cliente - Sistema de Incidencias{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('lista_clientes') }}">Clientes</a></li>
+        <li class="breadcrumb-item active" aria-current="page">
+            {{ 'Editar' if cliente else 'Nuevo Cliente' }}
+        </li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="bi bi-{{ 'pencil-square' if cliente else 'person-plus' }}"></i>
+                    {{ 'Editar Cliente' if cliente else 'Nuevo Cliente' }}
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="post"
+                      action="{{ url_for('editar_cliente', cliente_id=cliente.id) if cliente else url_for('nuevo_cliente') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label">Nombre <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre" name="nombre"
+                               value="{{ cliente.nombre if cliente else '' }}" required maxlength="200">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Correo electronico</label>
+                        <input type="email" class="form-control" id="email" name="email"
+                               value="{{ cliente.email if cliente else '' }}" maxlength="200">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="telefono" class="form-label">Telefono</label>
+                        <input type="text" class="form-control" id="telefono" name="telefono"
+                               value="{{ cliente.telefono if cliente else '' }}" maxlength="30">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="empresa" class="form-label">Empresa</label>
+                        <input type="text" class="form-control" id="empresa" name="empresa"
+                               value="{{ cliente.empresa if cliente else '' }}" maxlength="200">
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> {{ 'Guardar Cambios' if cliente else 'Crear Cliente' }}
+                        </button>
+                        <a href="{{ url_for('lista_clientes') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-lg"></i> Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
         </div>
-        <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input type="email" name="email" class="form-control" value="{{ cliente.email if cliente and cliente.email else '' }}">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Telefono</label>
-            <input type="text" name="telefono" class="form-control" value="{{ cliente.telefono if cliente and cliente.telefono else '' }}">
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Empresa</label>
-            <input type="text" name="empresa" class="form-control" value="{{ cliente.empresa if cliente and cliente.empresa else '' }}">
-        </div>
-        <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary">Guardar</button>
-            <a href="{{ url_for('lista_clientes') }}" class="btn btn-outline-secondary">Cancelar</a>
-        </div>
-    </form>
+    </div>
 </div>
 {% endblock %}

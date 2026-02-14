@@ -1,38 +1,77 @@
 {% extends "base.html" %}
-{% block titulo %}Clientes{% endblock %}
-{% block contenido %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0">Clientes</h4>
-    <a href="{{ url_for('nuevo_cliente') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nuevo</a>
+
+{% block title %}Clientes - Sistema de Incidencias{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Clientes</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-people"></i> Clientes</h2>
+    <a href="{{ url_for('nuevo_cliente') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Nuevo Cliente
+    </a>
 </div>
 
-{% if clientes %}
 <div class="card">
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead><tr><th>#</th><th>Nombre</th><th>Email</th><th>Telefono</th><th>Empresa</th><th>Acciones</th></tr></thead>
-            <tbody>
-            {% for c in clientes %}
-            <tr>
-                <td>{{ c.id }}</td>
-                <td>{{ c.nombre }}</td>
-                <td>{{ c.email or '-' }}</td>
-                <td>{{ c.telefono or '-' }}</td>
-                <td>{{ c.empresa or '-' }}</td>
-                <td>
-                    <a href="{{ url_for('editar_cliente', cliente_id=c.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
-                    <form method="post" action="{{ url_for('eliminar_cliente', cliente_id=c.id) }}" class="d-inline"
-                          onsubmit="return confirm('Eliminar cliente?')">
-                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Telefono</th>
+                        <th>Empresa</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in clientes %}
+                    <tr>
+                        <td>{{ c.id }}</td>
+                        <td>{{ c.nombre }}</td>
+                        <td>
+                            {% if c.email %}
+                            <a href="mailto:{{ c.email }}">{{ c.email }}</a>
+                            {% else %}&mdash;{% endif %}
+                        </td>
+                        <td>{{ c.telefono|default('&mdash;', true) }}</td>
+                        <td>{{ c.empresa|default('&mdash;', true) }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('editar_cliente', cliente_id=c.id) }}"
+                                   class="btn btn-outline-warning" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="post" action="{{ url_for('eliminar_cliente', cliente_id=c.id) }}"
+                                      class="d-inline"
+                                      onsubmit="return confirm('Eliminar el cliente {{ c.nombre }}?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline-danger" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            No hay clientes registrados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
-{% else %}
-<div class="card p-4 text-center text-muted">No hay clientes registrados.</div>
-{% endif %}
 {% endblock %}

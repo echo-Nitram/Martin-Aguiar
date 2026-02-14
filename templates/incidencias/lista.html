@@ -1,62 +1,159 @@
 {% extends "base.html" %}
-{% block titulo %}Incidencias{% endblock %}
-{% block contenido %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0">Incidencias</h4>
-    <a href="{{ url_for('nueva_incidencia') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Nueva</a>
-</div>
 
-<div class="card p-3 mb-3">
-    <form method="get" class="row g-2 align-items-end">
-        <div class="col-auto">
-            <label class="form-label small">Estado</label>
-            <select name="estado" class="form-select form-select-sm">
-                <option value="">Todos</option>
-                {% for e in estados %}
-                <option value="{{ e }}" {{ 'selected' if filtro_estado == e }}>{{ e }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <label class="form-label small">Prioridad</label>
-            <select name="prioridad" class="form-select form-select-sm">
-                <option value="">Todas</option>
-                {% for p in prioridades %}
-                <option value="{{ p }}" {{ 'selected' if filtro_prioridad == p }}>{{ p }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <button class="btn btn-sm btn-outline-primary">Filtrar</button>
-            <a href="{{ url_for('lista_incidencias') }}" class="btn btn-sm btn-outline-secondary">Limpiar</a>
-        </div>
-    </form>
-</div>
+{% block title %}Incidencias - Sistema de Incidencias{% endblock %}
 
-{% if incidencias %}
-<div class="card">
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead><tr><th>#</th><th>Titulo</th><th>Estado</th><th>Prioridad</th><th>Categoria</th><th>Cliente</th><th>Tecnico</th></tr></thead>
-            <tbody>
-            {% for i in incidencias %}
-            <tr style="cursor:pointer" onclick="location.href='{{ url_for('detalle_incidencia', inc_id=i.id) }}'">
-                <td>{{ i.id }}</td>
-                <td>{{ i.titulo }}</td>
-                <td><span class="badge bg-{{ estado_color.get(i.estado, 'secondary') }}">{{ i.estado }}</span></td>
-                <td><span class="badge bg-{{ prioridad_color.get(i.prioridad, 'secondary') }}">{{ i.prioridad }}</span></td>
-                <td>{{ i.categoria or '-' }}</td>
-                <td>{{ i.cliente_nombre or '-' }}</td>
-                <td>{{ i.tecnico_nombre or 'Sin asignar' }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Incidencias</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="bi bi-exclamation-triangle"></i> Incidencias</h2>
+    <div>
+        <a href="{{ url_for('exportar_csv', estado=request.args.get('estado',''), prioridad=request.args.get('prioridad','')) }}"
+           class="btn btn-outline-success me-2">
+            <i class="bi bi-filetype-csv"></i> Exportar CSV
+        </a>
+        <a href="{{ url_for('nueva_incidencia') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Nueva Incidencia
+        </a>
     </div>
 </div>
-{% else %}
-<div class="card p-4 text-center text-muted">
-    <p class="mb-0">No hay incidencias con estos filtros.</p>
+
+<!-- Search and Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="get" action="{{ url_for('buscar') }}" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label for="q" class="form-label">Buscar</label>
+                <input type="text" class="form-control" id="q" name="q"
+                       placeholder="Titulo, descripcion..." value="{{ busqueda|default('') }}">
+            </div>
+            <div class="col-md-2">
+                <label for="estado" class="form-label">Estado</label>
+                <select class="form-select" id="estado" name="estado">
+                    <option value="">Todos</option>
+                    {% for e in estados|default([]) %}
+                    <option value="{{ e }}" {{ 'selected' if request.args.get('estado') == e }}>{{ e }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="prioridad" class="form-label">Prioridad</label>
+                <select class="form-select" id="prioridad" name="prioridad">
+                    <option value="">Todas</option>
+                    {% for p in prioridades|default([]) %}
+                    <option value="{{ p }}" {{ 'selected' if request.args.get('prioridad') == p }}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('lista_incidencias') }}" class="btn btn-outline-secondary w-100">
+                    <i class="bi bi-x-circle"></i> Limpiar
+                </a>
+            </div>
+        </form>
+    </div>
 </div>
+
+<!-- Results info -->
+<p class="text-muted">
+    Mostrando {{ incidencias|length }} de {{ total|default(0) }} incidencias
+    {% if busqueda %} para "<strong>{{ busqueda }}</strong>"{% endif %}
+</p>
+
+<!-- Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>#</th>
+                        <th>Titulo</th>
+                        <th>Cliente</th>
+                        <th>Tecnico</th>
+                        <th>Estado</th>
+                        <th>Prioridad</th>
+                        <th>Categoria</th>
+                        <th>Creada</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in incidencias %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('detalle_incidencia', inc_id=inc.id) }}">{{ inc.id }}</a>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('detalle_incidencia', inc_id=inc.id) }}" class="text-decoration-none">
+                                {{ inc.titulo|truncate(45) }}
+                            </a>
+                        </td>
+                        <td>{{ inc.cliente_nombre or '—' }}</td>
+                        <td>{{ inc.tecnico_nombre or '<span class="text-muted">Sin asignar</span>'|safe }}</td>
+                        <td><span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }}">{{ inc.estado }}</span></td>
+                        <td><span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }}">{{ inc.prioridad }}</span></td>
+                        <td>{{ inc.categoria|default('—') }}</td>
+                        <td>
+                            <span title="{{ inc.creado_en }}">{{ inc.creado_en|hace }}</span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No se encontraron incidencias.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if total_paginas is defined and total_paginas > 1 %}
+<nav aria-label="Paginacion" class="mt-3">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {{ 'disabled' if page <= 1 }}">
+            <a class="page-link"
+               href="{{ url_for('lista_incidencias', page=page-1, estado=request.args.get('estado',''), prioridad=request.args.get('prioridad','')) }}">
+                <i class="bi bi-chevron-left"></i> Anterior
+            </a>
+        </li>
+        {% for p in range(1, total_paginas + 1) %}
+            {% if p == page %}
+            <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+            {% elif p <= 3 or p > total_paginas - 3 or (p >= page - 1 and p <= page + 1) %}
+            <li class="page-item">
+                <a class="page-link"
+                   href="{{ url_for('lista_incidencias', page=p, estado=request.args.get('estado',''), prioridad=request.args.get('prioridad','')) }}">
+                    {{ p }}
+                </a>
+            </li>
+            {% elif p == 4 or p == total_paginas - 3 %}
+            <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {{ 'disabled' if page >= total_paginas }}">
+            <a class="page-link"
+               href="{{ url_for('lista_incidencias', page=page+1, estado=request.args.get('estado',''), prioridad=request.args.get('prioridad','')) }}">
+                Siguiente <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
 {% endif %}
 {% endblock %}
