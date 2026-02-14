@@ -1,12 +1,14 @@
 """Interfaz web para el Sistema de Gestión de Incidencias."""
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from incidencias.database import init_db
 from incidencias import modelos, reportes, ia
 
 app = Flask(__name__)
-app.secret_key = "incidencias-soporte-2024"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "incidencias-soporte-2024")
 
 ESTADOS = ["abierta", "en_progreso", "en_espera", "resuelta", "cerrada"]
 PRIORIDADES = ["baja", "media", "alta", "critica"]
