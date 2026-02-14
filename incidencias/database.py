@@ -109,6 +109,65 @@ def init_db(db_path=None):
             creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
         );
+
+        CREATE TABLE IF NOT EXISTS sla_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prioridad TEXT NOT NULL UNIQUE,
+            tiempo_respuesta_horas INTEGER NOT NULL,
+            tiempo_resolucion_horas INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incidencia_id INTEGER NOT NULL,
+            usuario TEXT,
+            accion TEXT NOT NULL,
+            campo TEXT,
+            valor_anterior TEXT,
+            valor_nuevo TEXT,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS satisfaccion (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incidencia_id INTEGER NOT NULL UNIQUE,
+            puntuacion INTEGER NOT NULL CHECK(puntuacion BETWEEN 1 AND 5),
+            comentario TEXT,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (incidencia_id) REFERENCES incidencias(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS notificaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER NOT NULL,
+            titulo TEXT NOT NULL,
+            mensaje TEXT NOT NULL,
+            enlace TEXT,
+            leida INTEGER DEFAULT 0,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS articulos_kb (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titulo TEXT NOT NULL,
+            contenido TEXT NOT NULL,
+            categoria TEXT,
+            autor TEXT,
+            publicado INTEGER DEFAULT 1,
+            visitas INTEGER DEFAULT 0,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- SLA defaults
+        INSERT OR IGNORE INTO sla_config (prioridad, tiempo_respuesta_horas, tiempo_resolucion_horas)
+        VALUES
+            ('critica', 1, 4),
+            ('alta', 4, 24),
+            ('media', 8, 48),
+            ('baja', 24, 120);
     """)
 
     conn.commit()

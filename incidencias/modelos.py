@@ -399,3 +399,303 @@ def obtener_adjunto(adjunto_id):
     row = conn.execute("SELECT * FROM adjuntos WHERE id = ?", (adjunto_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+# ── SLA ──────────────────────────────────────────────────────────────────
+
+def obtener_sla_config():
+    """Retorna la configuracion SLA como dict {prioridad: {resp, resol}}."""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM sla_config").fetchall()
+    conn.close()
+    return {r["prioridad"]: dict(r) for r in rows}
+
+
+def calcular_sla_incidencia(inc):
+    """Calcula el estado SLA de una incidencia."""
+    sla = obtener_sla_config()
+    prioridad = inc.get("prioridad", "media")
+    config = sla.get(prioridad)
+    if not config:
+        return {"porcentaje_resolucion": 0, "estado_sla": "sin_sla"}
+
+    creado = datetime.fromisoformat(str(inc["creado_en"]))
+    fin = datetime.now()
+    if inc.get("cerrado_en"):
+        fin = datetime.fromisoformat(str(inc["cerrado_en"]))
+
+    horas = (fin - creado).total_seconds() / 3600
+    resol_horas = config["tiempo_resolucion_horas"]
+    resp_horas = config["tiempo_respuesta_horas"]
+    pct_resol = min(100, (horas / resol_horas) * 100) if resol_horas else 100
+
+    if inc["estado"] in ("resuelta", "cerrada"):
+        estado_sla = "cumplido" if horas <= resol_horas else "vencido"
+    elif horas > resol_horas:
+        estado_sla = "vencido"
+    elif horas > resol_horas * 0.75:
+        estado_sla = "por_vencer"
+    else:
+        estado_sla = "en_tiempo"
+
+    return {
+        "porcentaje_resolucion": round(pct_resol, 1),
+        "estado_sla": estado_sla,
+        "horas_transcurridas": round(horas, 1),
+        "limite_respuesta": resp_horas,
+        "limite_resolucion": resol_horas,
+    }
+
+
+def metricas_sla():
+    """Retorna metricas globales de SLA."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT i.*, s.tiempo_resolucion_horas
+        FROM incidencias i
+        JOIN sla_config s ON i.prioridad = s.prioridad
+        WHERE i.estado IN ('resuelta', 'cerrada')
+          AND i.cerrado_en IS NOT NULL
+    """).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"total": 0, "cumplidos": 0, "vencidos": 0, "pct_cumplimiento": 0,
+                "tiempo_promedio_horas": 0}
+
+    cumplidos = 0
+    total_horas = 0
+    for r in rows:
+        creado = datetime.fromisoformat(str(r["creado_en"]))
+        cerrado = datetime.fromisoformat(str(r["cerrado_en"]))
+        horas = (cerrado - creado).total_seconds() / 3600
+        total_horas += horas
+        if horas <= r["tiempo_resolucion_horas"]:
+            cumplidos += 1
+
+    total = len(rows)
+    return {
+        "total": total,
+        "cumplidos": cumplidos,
+        "vencidos": total - cumplidos,
+        "pct_cumplimiento": round((cumplidos / total) * 100, 1) if total else 0,
+        "tiempo_promedio_horas": round(total_horas / total, 1) if total else 0,
+    }
+
+
+# ── Auditoria ────────────────────────────────────────────────────────────
+
+def registrar_auditoria(incidencia_id, usuario, accion, campo=None,
+                        valor_anterior=None, valor_nuevo=None):
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO auditoria (incidencia_id, usuario, accion, campo, valor_anterior, valor_nuevo)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (incidencia_id, usuario, accion, campo, valor_anterior, valor_nuevo),
+    )
+    conn.commit()
+    conn.close()
+
+
+def listar_auditoria(incidencia_id):
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM auditoria WHERE incidencia_id = ? ORDER BY creado_en DESC",
+        (incidencia_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ── Satisfaccion ─────────────────────────────────────────────────────────
+
+def guardar_satisfaccion(incidencia_id, puntuacion, comentario=None):
+    conn = get_connection()
+    conn.execute(
+        """INSERT OR REPLACE INTO satisfaccion (incidencia_id, puntuacion, comentario)
+           VALUES (?, ?, ?)""",
+        (incidencia_id, puntuacion, comentario),
+    )
+    conn.commit()
+    conn.close()
+
+
+def obtener_satisfaccion(incidencia_id):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM satisfaccion WHERE incidencia_id = ?", (incidencia_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def promedio_satisfaccion():
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT AVG(puntuacion) as promedio, COUNT(*) as total FROM satisfaccion"
+    ).fetchone()
+    conn.close()
+    return {"promedio": round(row["promedio"], 1) if row["promedio"] else 0,
+            "total": row["total"]}
+
+
+# ── Notificaciones ───────────────────────────────────────────────────────
+
+def crear_notificacion(usuario_id, titulo, mensaje, enlace=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO notificaciones (usuario_id, titulo, mensaje, enlace)
+           VALUES (?, ?, ?, ?)""",
+        (usuario_id, titulo, mensaje, enlace),
+    )
+    conn.commit()
+    nid = cursor.lastrowid
+    conn.close()
+    return nid
+
+
+def listar_notificaciones(usuario_id, solo_no_leidas=False, limite=20):
+    conn = get_connection()
+    query = "SELECT * FROM notificaciones WHERE usuario_id = ?"
+    params = [usuario_id]
+    if solo_no_leidas:
+        query += " AND leida = 0"
+    query += " ORDER BY creado_en DESC LIMIT ?"
+    params.append(limite)
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def contar_notificaciones_no_leidas(usuario_id):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT COUNT(*) as total FROM notificaciones WHERE usuario_id = ? AND leida = 0",
+        (usuario_id,),
+    ).fetchone()
+    conn.close()
+    return row["total"]
+
+
+def marcar_notificacion_leida(notificacion_id, usuario_id):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE notificaciones SET leida = 1 WHERE id = ? AND usuario_id = ?",
+        (notificacion_id, usuario_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def marcar_todas_leidas(usuario_id):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE notificaciones SET leida = 1 WHERE usuario_id = ? AND leida = 0",
+        (usuario_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def notificar_cambio_incidencia(inc_id, titulo_notif, mensaje, enlace=None):
+    """Notifica a todos los usuarios relacionados con una incidencia."""
+    conn = get_connection()
+    inc = conn.execute("SELECT * FROM incidencias WHERE id = ?", (inc_id,)).fetchone()
+    if not inc:
+        conn.close()
+        return
+    usuario_ids = set()
+    if inc["cliente_id"]:
+        rows = conn.execute(
+            "SELECT id FROM usuarios WHERE cliente_id = ? AND activo = 1",
+            (inc["cliente_id"],),
+        ).fetchall()
+        for r in rows:
+            usuario_ids.add(r["id"])
+    if inc["tecnico_id"]:
+        rows = conn.execute(
+            "SELECT id FROM usuarios WHERE role = 'tecnico' AND activo = 1"
+        ).fetchall()
+        for r in rows:
+            usuario_ids.add(r["id"])
+    rows = conn.execute(
+        "SELECT id FROM usuarios WHERE role = 'admin' AND activo = 1"
+    ).fetchall()
+    for r in rows:
+        usuario_ids.add(r["id"])
+    conn.close()
+
+    for uid in usuario_ids:
+        crear_notificacion(uid, titulo_notif, mensaje, enlace)
+
+
+# ── Base de Conocimiento ─────────────────────────────────────────────────
+
+def crear_articulo_kb(titulo, contenido, categoria=None, autor=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO articulos_kb (titulo, contenido, categoria, autor)
+           VALUES (?, ?, ?, ?)""",
+        (titulo, contenido, categoria, autor),
+    )
+    conn.commit()
+    aid = cursor.lastrowid
+    conn.close()
+    return aid
+
+
+def listar_articulos_kb(categoria=None, solo_publicados=True, termino=None):
+    conn = get_connection()
+    query = "SELECT * FROM articulos_kb WHERE 1=1"
+    params = []
+    if solo_publicados:
+        query += " AND publicado = 1"
+    if categoria:
+        query += " AND categoria = ?"
+        params.append(categoria)
+    if termino:
+        query += " AND (titulo LIKE ? OR contenido LIKE ?)"
+        params.extend([f"%{termino}%", f"%{termino}%"])
+    query += " ORDER BY creado_en DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def obtener_articulo_kb(articulo_id):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM articulos_kb WHERE id = ?", (articulo_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def incrementar_visitas_kb(articulo_id):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE articulos_kb SET visitas = visitas + 1 WHERE id = ?", (articulo_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def actualizar_articulo_kb(articulo_id, **campos):
+    if not campos:
+        return False
+    campos["actualizado_en"] = datetime.now().isoformat()
+    sets = ", ".join(f"{k} = ?" for k in campos)
+    vals = list(campos.values()) + [articulo_id]
+    conn = get_connection()
+    conn.execute(f"UPDATE articulos_kb SET {sets} WHERE id = ?", vals)
+    conn.commit()
+    conn.close()
+    return True
+
+
+def eliminar_articulo_kb(articulo_id):
+    conn = get_connection()
+    conn.execute("DELETE FROM articulos_kb WHERE id = ?", (articulo_id,))
+    conn.commit()
+    conn.close()
+    return True

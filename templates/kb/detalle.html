@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ articulo.titulo }} - Base de Conocimiento{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('kb_lista') }}">Base de Conocimiento</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ articulo.titulo|truncate(40) }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="mb-0">{{ articulo.titulo }}</h3>
+                {% if current_user.is_authenticated and current_user.es_staff %}
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('kb_editar', art_id=articulo.id) }}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil"></i> Editar
+                    </a>
+                    <form method="post" action="{{ url_for('kb_eliminar', art_id=articulo.id) }}"
+                          onsubmit="return confirm('Eliminar este articulo?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-3 mb-3 text-muted small">
+                    {% if articulo.categoria %}
+                    <span><i class="bi bi-tag"></i> {{ articulo.categoria|capitalize }}</span>
+                    {% endif %}
+                    <span><i class="bi bi-person"></i> {{ articulo.autor or 'Anonimo' }}</span>
+                    <span><i class="bi bi-calendar"></i> {{ articulo.creado_en|hace }}</span>
+                    <span><i class="bi bi-eye"></i> {{ articulo.visitas }} visitas</span>
+                </div>
+                <hr>
+                <div style="white-space: pre-wrap;">{{ articulo.contenido }}</div>
+            </div>
+        </div>
+        <div class="mt-3">
+            <a href="{{ url_for('kb_lista') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Volver a la base de conocimiento
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Mi Panel - Sistema de Incidencias{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Mi Panel</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2><i class="bi bi-kanban"></i> Mi Panel</h2>
+        {% if tecnico %}
+        <p class="text-muted mb-0">{{ tecnico.nombre }} — {{ tecnico.especialidad or 'General' }}</p>
+        {% endif %}
+    </div>
+    <div>
+        <span class="badge bg-warning fs-6">{{ activas|length }} activas</span>
+        <span class="badge bg-success fs-6">{{ resueltas|length }} resueltas</span>
+    </div>
+</div>
+
+{% if not tecnico %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No se encontro un tecnico asociado con tu nombre de usuario.
+    Contacta al administrador para vincular tu cuenta.
+</div>
+{% else %}
+
+<!-- Active Incidents -->
+<h4 class="mb-3"><i class="bi bi-folder2-open"></i> Incidencias Activas</h4>
+{% if activas %}
+<div class="row g-3 mb-4">
+    {% for inc in activas %}
+    <div class="col-md-6 col-xl-4">
+        <div class="card border-start border-4 border-{{ sla_color.get(inc.sla.estado_sla, 'secondary') }} h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="card-title mb-0">
+                        <a href="{{ url_for('detalle_incidencia', inc_id=inc.id) }}" class="text-decoration-none">
+                            #{{ inc.id }} {{ inc.titulo|truncate(35) }}
+                        </a>
+                    </h6>
+                    <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }}">{{ inc.prioridad }}</span>
+                </div>
+                <p class="small text-muted mb-2">{{ inc.cliente_nombre or 'Sin cliente' }}</p>
+                <div class="d-flex gap-1 mb-2">
+                    <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }}">{{ inc.estado|replace('_',' ') }}</span>
+                </div>
+                <!-- SLA Progress -->
+                <div class="mt-2">
+                    <div class="d-flex justify-content-between small">
+                        <span>SLA: {{ inc.sla.horas_transcurridas }}h / {{ inc.sla.limite_resolucion }}h</span>
+                        <span class="badge bg-{{ sla_color.get(inc.sla.estado_sla, 'secondary') }}">
+                            {{ inc.sla.estado_sla|replace('_',' ') }}
+                        </span>
+                    </div>
+                    <div class="progress mt-1" style="height: 6px;">
+                        <div class="progress-bar bg-{{ sla_color.get(inc.sla.estado_sla, 'secondary') }}"
+                             style="width: {{ inc.sla.porcentaje_resolucion }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-success mb-4">
+    <i class="bi bi-check-circle"></i> No tenes incidencias activas asignadas.
+</div>
+{% endif %}
+
+<!-- Resolved -->
+<h4 class="mb-3"><i class="bi bi-check-circle"></i> Resueltas Recientemente</h4>
+{% if resueltas %}
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Titulo</th>
+                        <th>Cliente</th>
+                        <th>Estado</th>
+                        <th>Cerrada</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inc in resueltas[:10] %}
+                    <tr>
+                        <td><a href="{{ url_for('detalle_incidencia', inc_id=inc.id) }}">{{ inc.id }}</a></td>
+                        <td>{{ inc.titulo|truncate(50) }}</td>
+                        <td>{{ inc.cliente_nombre or '—' }}</td>
+                        <td><span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }}">{{ inc.estado }}</span></td>
+                        <td><span title="{{ inc.cerrado_en }}">{{ inc.cerrado_en|hace if inc.cerrado_en else '—' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<p class="text-muted">No hay incidencias resueltas.</p>
+{% endif %}
+
+{% endif %}
+{% endblock %}

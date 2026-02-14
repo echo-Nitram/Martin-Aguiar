@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if articulo else 'Nuevo' }} Articulo - Base de Conocimiento{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('kb_lista') }}">Base de Conocimiento</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ 'Editar' if articulo else 'Nuevo' }} Articulo</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">
+                    <i class="bi bi-journal-plus"></i>
+                    {{ 'Editar Articulo' if articulo else 'Nuevo Articulo' }}
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="titulo" class="form-label">Titulo</label>
+                        <input type="text" class="form-control" id="titulo" name="titulo"
+                               value="{{ articulo.titulo if articulo else '' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="categoria" class="form-label">Categoria</label>
+                        <select class="form-select" id="categoria" name="categoria">
+                            <option value="">Sin categoria</option>
+                            {% for cat in categorias %}
+                            <option value="{{ cat }}" {{ 'selected' if articulo and articulo.categoria == cat }}>
+                                {{ cat|capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="contenido" class="form-label">Contenido</label>
+                        <textarea class="form-control" id="contenido" name="contenido" rows="15"
+                                  required>{{ articulo.contenido if articulo else '' }}</textarea>
+                    </div>
+                    {% if articulo %}
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="publicado" name="publicado"
+                               {{ 'checked' if articulo.publicado }}>
+                        <label class="form-check-label" for="publicado">Publicado</label>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> {{ 'Guardar' if articulo else 'Publicar' }}
+                        </button>
+                        <a href="{{ url_for('kb_lista') }}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

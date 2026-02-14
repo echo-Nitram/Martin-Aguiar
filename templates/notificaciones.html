@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Notificaciones - Sistema de Incidencias{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Notificaciones</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-bell"></i> Notificaciones</h2>
+    {% if notificaciones %}
+    <form method="post" action="{{ url_for('marcar_todas_leidas') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-check-all"></i> Marcar todas como leidas
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+{% if notificaciones %}
+<div class="list-group">
+    {% for n in notificaciones %}
+    <a href="{{ n.enlace or '#' }}" class="list-group-item list-group-item-action {{ '' if n.leida else 'list-group-item-light fw-bold' }}">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h6 class="mb-1">
+                    {% if not n.leida %}<i class="bi bi-circle-fill text-primary" style="font-size: 0.5rem;"></i>{% endif %}
+                    {{ n.titulo }}
+                </h6>
+                <p class="mb-1 small text-muted">{{ n.mensaje }}</p>
+            </div>
+            <small class="text-muted text-nowrap ms-3">{{ n.creado_en|hace }}</small>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-bell-slash" style="font-size: 4rem; color: #ccc;"></i>
+    <h4 class="mt-3 text-muted">No hay notificaciones</h4>
+</div>
+{% endif %}
+{% endblock %}

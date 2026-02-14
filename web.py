@@ -75,6 +75,13 @@ PRIORIDAD_COLOR = {
     "alta": "warning",
     "critica": "danger",
 }
+SLA_COLOR = {
+    "en_tiempo": "success",
+    "por_vencer": "warning",
+    "vencido": "danger",
+    "cumplido": "success",
+    "sin_sla": "secondary",
+}
 
 
 # ── Auth (Flask-Login) ───────────────────────────────────────────────────
@@ -94,6 +101,10 @@ class User(UserMixin):
     @property
     def es_cliente(self):
         return self.role == "cliente"
+
+    @property
+    def es_admin(self):
+        return self.role == "admin"
 
 
 @login_manager.user_loader
@@ -130,10 +141,15 @@ def tiempo_relativo(fecha_str):
 @app.context_processor
 def utilidades():
     ia_disponible = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    notif_count = 0
+    if current_user.is_authenticated:
+        notif_count = modelos.contar_notificaciones_no_leidas(current_user.id)
     return dict(
         estado_color=ESTADO_COLOR,
         prioridad_color=PRIORIDAD_COLOR,
+        sla_color=SLA_COLOR,
         ia_disponible=ia_disponible,
+        notif_count=notif_count,
     )
 
 
@@ -150,6 +166,30 @@ def validar_texto(valor, max_len=500, campo="campo"):
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def staff_required(f):
+    """Decorador que requiere rol admin o tecnico."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.es_staff:
+            flash("No tenes permisos para acceder a esta seccion.", "danger")
+            return redirect(url_for("landing"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def admin_required(f):
+    """Decorador que requiere rol admin."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.es_admin:
+            flash("Solo los administradores pueden acceder a esta seccion.", "danger")
+            return redirect(url_for("dashboard"))
+        return f(*args, **kwargs)
+    return decorated
 
 
 # ── Error Handlers ───────────────────────────────────────────────────────
@@ -205,7 +245,9 @@ def landing():
         if current_user.es_cliente:
             return redirect(url_for("portal_dashboard"))
         return redirect(url_for("dashboard"))
-    return render_template("landing.html")
+    # Mostrar articulos KB publicos en landing
+    articulos = modelos.listar_articulos_kb(solo_publicados=True)[:3]
+    return render_template("landing.html", articulos_kb=articulos)
 
 
 # ── Registro de Clientes (publico) ──────────────────────────────────────
@@ -258,7 +300,45 @@ def dashboard():
         return redirect(url_for("portal_dashboard"))
     resumen = reportes.resumen_general()
     recientes, _ = modelos.listar_incidencias(per_page=5)
-    return render_template("dashboard.html", resumen=resumen, recientes=recientes)
+    sla_stats = modelos.metricas_sla()
+    satisf = modelos.promedio_satisfaccion()
+    return render_template("dashboard.html", resumen=resumen, recientes=recientes,
+                           sla_stats=sla_stats, satisfaccion=satisf)
+
+
+# ── Dashboard Tecnico ───────────────────────────────────────────────────
+
+@app.route("/mi-panel")
+@login_required
+@staff_required
+def dashboard_tecnico():
+    # Buscar tecnico_id que coincida con el nombre del usuario
+    tecnicos = modelos.listar_tecnicos()
+    mi_tecnico = None
+    for t in tecnicos:
+        if t["nombre"] == current_user.nombre:
+            mi_tecnico = t
+            break
+
+    mis_incidencias = []
+    total = 0
+    if mi_tecnico:
+        mis_incidencias, total = modelos.listar_incidencias(
+            tecnico_id=mi_tecnico["id"], per_page=50
+        )
+
+    # Separar por estado
+    activas = [i for i in mis_incidencias if i["estado"] not in ("resuelta", "cerrada")]
+    resueltas = [i for i in mis_incidencias if i["estado"] in ("resuelta", "cerrada")]
+
+    # Calcular SLA para activas
+    for inc in activas:
+        inc["sla"] = modelos.calcular_sla_incidencia(inc)
+
+    return render_template(
+        "mi_panel.html", activas=activas, resueltas=resueltas,
+        total=total, tecnico=mi_tecnico,
+    )
 
 
 # ── Busqueda ─────────────────────────────────────────────────────────────
@@ -308,13 +388,19 @@ def nueva_incidencia():
         if err:
             flash(err, "danger")
             return redirect(url_for("nueva_incidencia"))
-        modelos.crear_incidencia(
+        inc_id = modelos.crear_incidencia(
             titulo=titulo,
             descripcion=request.form.get("descripcion") or None,
             prioridad=request.form.get("prioridad", "media"),
             categoria=request.form.get("categoria") or None,
             cliente_id=request.form.get("cliente_id") or None,
             tecnico_id=request.form.get("tecnico_id") or None,
+        )
+        modelos.registrar_auditoria(inc_id, current_user.nombre, "creacion")
+        modelos.notificar_cambio_incidencia(
+            inc_id, "Nueva incidencia",
+            f"Se creo la incidencia #{inc_id}: {titulo}",
+            url_for("detalle_incidencia", inc_id=inc_id),
         )
         flash("Incidencia creada correctamente", "success")
         return redirect(url_for("lista_incidencias"))
@@ -338,17 +424,36 @@ def detalle_incidencia(inc_id):
     tecnicos = modelos.listar_tecnicos()
     adjuntos = modelos.listar_adjuntos(inc_id)
     historial_ia = modelos.listar_historial_ia(inc_id)
+    auditoria = modelos.listar_auditoria(inc_id)
+    sla = modelos.calcular_sla_incidencia(inc)
+    satisf = modelos.obtener_satisfaccion(inc_id)
     return render_template(
         "incidencias/detalle.html", inc=inc, notas=notas,
         estados=ESTADOS, tecnicos=tecnicos, adjuntos=adjuntos,
-        historial_ia=historial_ia,
+        historial_ia=historial_ia, auditoria=auditoria,
+        sla=sla, satisfaccion=satisf,
     )
 
 
 @app.route("/incidencias/<int:inc_id>/estado", methods=["POST"])
 @login_required
 def cambiar_estado(inc_id):
-    modelos.actualizar_incidencia(inc_id, estado=request.form["estado"])
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("lista_incidencias"))
+    nuevo_estado = request.form["estado"]
+    viejo_estado = inc["estado"]
+    modelos.actualizar_incidencia(inc_id, estado=nuevo_estado)
+    modelos.registrar_auditoria(
+        inc_id, current_user.nombre, "cambio_estado",
+        "estado", viejo_estado, nuevo_estado,
+    )
+    modelos.notificar_cambio_incidencia(
+        inc_id, "Estado actualizado",
+        f"Incidencia #{inc_id} cambio de {viejo_estado} a {nuevo_estado}",
+        url_for("detalle_incidencia", inc_id=inc_id),
+    )
     flash("Estado actualizado", "success")
     return redirect(url_for("detalle_incidencia", inc_id=inc_id))
 
@@ -356,8 +461,26 @@ def cambiar_estado(inc_id):
 @app.route("/incidencias/<int:inc_id>/asignar", methods=["POST"])
 @login_required
 def asignar_tecnico(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("lista_incidencias"))
     tecnico_id = request.form.get("tecnico_id") or None
+    viejo = inc.get("tecnico_nombre") or "Ninguno"
     modelos.actualizar_incidencia(inc_id, tecnico_id=tecnico_id)
+    nuevo = "Ninguno"
+    if tecnico_id:
+        t = modelos.obtener_tecnico(int(tecnico_id))
+        nuevo = t["nombre"] if t else "Desconocido"
+    modelos.registrar_auditoria(
+        inc_id, current_user.nombre, "asignacion",
+        "tecnico", viejo, nuevo,
+    )
+    modelos.notificar_cambio_incidencia(
+        inc_id, "Tecnico asignado",
+        f"Incidencia #{inc_id} asignada a {nuevo}",
+        url_for("detalle_incidencia", inc_id=inc_id),
+    )
     flash("Tecnico asignado", "success")
     return redirect(url_for("detalle_incidencia", inc_id=inc_id))
 
@@ -374,6 +497,12 @@ def agregar_nota(inc_id):
         contenido=contenido,
         autor=request.form.get("autor") or current_user.nombre,
     )
+    modelos.registrar_auditoria(inc_id, current_user.nombre, "nota_agregada")
+    modelos.notificar_cambio_incidencia(
+        inc_id, "Nueva nota",
+        f"Nueva nota en incidencia #{inc_id}",
+        url_for("detalle_incidencia", inc_id=inc_id),
+    )
     flash("Nota agregada", "success")
     return redirect(url_for("detalle_incidencia", inc_id=inc_id))
 
@@ -384,6 +513,28 @@ def eliminar_incidencia(inc_id):
     modelos.eliminar_incidencia(inc_id)
     flash("Incidencia eliminada", "success")
     return redirect(url_for("lista_incidencias"))
+
+
+# ── Satisfaccion ─────────────────────────────────────────────────────────
+
+@app.route("/incidencias/<int:inc_id>/satisfaccion", methods=["POST"])
+@login_required
+def calificar_incidencia(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("lista_incidencias"))
+    puntuacion = request.form.get("puntuacion", type=int)
+    if not puntuacion or puntuacion < 1 or puntuacion > 5:
+        flash("Puntuacion invalida", "danger")
+        return redirect(url_for("detalle_incidencia", inc_id=inc_id))
+    comentario = request.form.get("comentario", "").strip() or None
+    modelos.guardar_satisfaccion(inc_id, puntuacion, comentario)
+    flash("Gracias por tu calificacion!", "success")
+    # Redirect depends on role
+    if current_user.es_cliente:
+        return redirect(url_for("portal_detalle", inc_id=inc_id))
+    return redirect(url_for("detalle_incidencia", inc_id=inc_id))
 
 
 # ── Adjuntos ─────────────────────────────────────────────────────────────
@@ -695,6 +846,120 @@ def ia_chat_limpiar(inc_id):
     return jsonify(ok=True)
 
 
+# ── Notificaciones ──────────────────────────────────────────────────────
+
+@app.route("/notificaciones")
+@login_required
+def lista_notificaciones():
+    notifs = modelos.listar_notificaciones(current_user.id)
+    return render_template("notificaciones.html", notificaciones=notifs)
+
+
+@app.route("/notificaciones/json")
+@login_required
+def notificaciones_json():
+    notifs = modelos.listar_notificaciones(current_user.id, limite=10)
+    count = modelos.contar_notificaciones_no_leidas(current_user.id)
+    return jsonify(notificaciones=notifs, no_leidas=count)
+
+
+@app.route("/notificaciones/<int:notif_id>/leer", methods=["POST"])
+@login_required
+def marcar_notificacion_leida(notif_id):
+    modelos.marcar_notificacion_leida(notif_id, current_user.id)
+    return jsonify(ok=True)
+
+
+@app.route("/notificaciones/leer-todas", methods=["POST"])
+@login_required
+def marcar_todas_leidas():
+    modelos.marcar_todas_leidas(current_user.id)
+    flash("Todas las notificaciones marcadas como leidas", "success")
+    return redirect(url_for("lista_notificaciones"))
+
+
+# ── Base de Conocimiento ────────────────────────────────────────────────
+
+@app.route("/conocimiento")
+def kb_lista():
+    categoria = request.args.get("categoria")
+    termino = request.args.get("q", "").strip() or None
+    articulos = modelos.listar_articulos_kb(categoria=categoria, termino=termino)
+    return render_template(
+        "kb/lista.html", articulos=articulos,
+        categorias=CATEGORIAS, filtro_categoria=categoria, busqueda=termino,
+    )
+
+
+@app.route("/conocimiento/<int:art_id>")
+def kb_detalle(art_id):
+    art = modelos.obtener_articulo_kb(art_id)
+    if not art or (not art["publicado"] and not (current_user.is_authenticated and current_user.es_staff)):
+        flash("Articulo no encontrado", "danger")
+        return redirect(url_for("kb_lista"))
+    modelos.incrementar_visitas_kb(art_id)
+    return render_template("kb/detalle.html", articulo=art)
+
+
+@app.route("/conocimiento/nuevo", methods=["GET", "POST"])
+@login_required
+@staff_required
+def kb_nuevo():
+    if request.method == "POST":
+        titulo, err = validar_texto(request.form.get("titulo"), 200, "titulo")
+        if err:
+            flash(err, "danger")
+            return redirect(url_for("kb_nuevo"))
+        contenido, err = validar_texto(request.form.get("contenido"), 10000, "contenido")
+        if err:
+            flash(err, "danger")
+            return redirect(url_for("kb_nuevo"))
+        modelos.crear_articulo_kb(
+            titulo=titulo, contenido=contenido,
+            categoria=request.form.get("categoria") or None,
+            autor=current_user.nombre,
+        )
+        flash("Articulo publicado", "success")
+        return redirect(url_for("kb_lista"))
+    return render_template("kb/form.html", articulo=None, categorias=CATEGORIAS)
+
+
+@app.route("/conocimiento/<int:art_id>/editar", methods=["GET", "POST"])
+@login_required
+@staff_required
+def kb_editar(art_id):
+    art = modelos.obtener_articulo_kb(art_id)
+    if not art:
+        flash("Articulo no encontrado", "danger")
+        return redirect(url_for("kb_lista"))
+    if request.method == "POST":
+        titulo, err = validar_texto(request.form.get("titulo"), 200, "titulo")
+        if err:
+            flash(err, "danger")
+            return redirect(url_for("kb_editar", art_id=art_id))
+        contenido, err = validar_texto(request.form.get("contenido"), 10000, "contenido")
+        if err:
+            flash(err, "danger")
+            return redirect(url_for("kb_editar", art_id=art_id))
+        modelos.actualizar_articulo_kb(
+            art_id, titulo=titulo, contenido=contenido,
+            categoria=request.form.get("categoria") or None,
+            publicado=1 if request.form.get("publicado") else 0,
+        )
+        flash("Articulo actualizado", "success")
+        return redirect(url_for("kb_detalle", art_id=art_id))
+    return render_template("kb/form.html", articulo=art, categorias=CATEGORIAS)
+
+
+@app.route("/conocimiento/<int:art_id>/eliminar", methods=["POST"])
+@login_required
+@staff_required
+def kb_eliminar(art_id):
+    modelos.eliminar_articulo_kb(art_id)
+    flash("Articulo eliminado", "success")
+    return redirect(url_for("kb_lista"))
+
+
 # ── Portal del Cliente ───────────────────────────────────────────────────
 
 @app.route("/portal")
@@ -703,8 +968,13 @@ def portal_dashboard():
     if current_user.es_staff:
         return redirect(url_for("dashboard"))
     items, total = modelos.listar_incidencias(cliente_id=current_user.cliente_id)
+
+    activas = [i for i in items if i["estado"] not in ("resuelta", "cerrada")]
+    historial = [i for i in items if i["estado"] in ("resuelta", "cerrada")]
+
     return render_template(
-        "portal/dashboard.html", incidencias=items, total=total,
+        "portal/dashboard.html", incidencias=items,
+        activas=activas, historial=historial, total=total,
         estado_color=ESTADO_COLOR, prioridad_color=PRIORIDAD_COLOR,
     )
 
@@ -719,12 +989,18 @@ def portal_nueva_incidencia():
         if err:
             flash(err, "danger")
             return redirect(url_for("portal_nueva_incidencia"))
-        modelos.crear_incidencia(
+        inc_id = modelos.crear_incidencia(
             titulo=titulo,
             descripcion=request.form.get("descripcion") or None,
             prioridad=request.form.get("prioridad", "media"),
             categoria=request.form.get("categoria") or None,
             cliente_id=current_user.cliente_id,
+        )
+        modelos.registrar_auditoria(inc_id, current_user.nombre, "creacion")
+        modelos.notificar_cambio_incidencia(
+            inc_id, "Nueva incidencia del cliente",
+            f"El cliente creo la incidencia #{inc_id}: {titulo}",
+            url_for("detalle_incidencia", inc_id=inc_id),
         )
         flash("Incidencia creada correctamente. Nuestro equipo la revisara pronto.", "success")
         return redirect(url_for("portal_dashboard"))
@@ -745,8 +1021,11 @@ def portal_detalle(inc_id):
         return redirect(url_for("portal_dashboard"))
     notas = modelos.listar_notas(inc_id)
     adjuntos = modelos.listar_adjuntos(inc_id)
+    sla = modelos.calcular_sla_incidencia(inc)
+    satisf = modelos.obtener_satisfaccion(inc_id)
     return render_template(
         "portal/detalle.html", inc=inc, notas=notas, adjuntos=adjuntos,
+        sla=sla, satisfaccion=satisf,
     )
 
 
@@ -762,6 +1041,11 @@ def portal_agregar_nota(inc_id):
         flash(err, "danger")
         return redirect(url_for("portal_detalle", inc_id=inc_id))
     modelos.agregar_nota(inc_id, contenido, autor=current_user.nombre)
+    modelos.notificar_cambio_incidencia(
+        inc_id, "Nuevo mensaje del cliente",
+        f"El cliente envio un mensaje en la incidencia #{inc_id}",
+        url_for("detalle_incidencia", inc_id=inc_id),
+    )
     flash("Mensaje enviado", "success")
     return redirect(url_for("portal_detalle", inc_id=inc_id))
 
@@ -794,6 +1078,127 @@ def portal_subir_adjunto(inc_id):
     return redirect(url_for("portal_detalle", inc_id=inc_id))
 
 
+@app.route("/portal/incidencia/<int:inc_id>/reabrir", methods=["POST"])
+@login_required
+def portal_reabrir(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc or inc["cliente_id"] != current_user.cliente_id:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("portal_dashboard"))
+    if inc["estado"] not in ("resuelta", "cerrada"):
+        flash("Solo se pueden reabrir incidencias resueltas o cerradas", "warning")
+        return redirect(url_for("portal_detalle", inc_id=inc_id))
+    modelos.actualizar_incidencia(inc_id, estado="abierta", cerrado_en=None)
+    modelos.registrar_auditoria(inc_id, current_user.nombre, "reapertura",
+                                "estado", inc["estado"], "abierta")
+    modelos.notificar_cambio_incidencia(
+        inc_id, "Incidencia reabierta",
+        f"El cliente reabrio la incidencia #{inc_id}",
+        url_for("detalle_incidencia", inc_id=inc_id),
+    )
+    flash("Incidencia reabierta. Nuestro equipo la revisara.", "success")
+    return redirect(url_for("portal_detalle", inc_id=inc_id))
+
+
+# ── API REST ─────────────────────────────────────────────────────────────
+
+@app.route("/api/incidencias")
+@login_required
+def api_listar_incidencias():
+    estado = request.args.get("estado")
+    prioridad = request.args.get("prioridad")
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = min(per_page, 100)
+
+    if current_user.es_cliente:
+        items, total = modelos.listar_incidencias(
+            estado=estado, prioridad=prioridad,
+            cliente_id=current_user.cliente_id, page=page, per_page=per_page,
+        )
+    else:
+        items, total = modelos.listar_incidencias(
+            estado=estado, prioridad=prioridad, page=page, per_page=per_page,
+        )
+
+    return jsonify(incidencias=items, total=total, page=page, per_page=per_page)
+
+
+@app.route("/api/incidencias/<int:inc_id>")
+@login_required
+def api_detalle_incidencia(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        return jsonify(error="No encontrada"), 404
+    if current_user.es_cliente and inc["cliente_id"] != current_user.cliente_id:
+        return jsonify(error="No autorizado"), 403
+    notas = modelos.listar_notas(inc_id)
+    sla = modelos.calcular_sla_incidencia(inc)
+    return jsonify(incidencia=inc, notas=notas, sla=sla)
+
+
+@app.route("/api/incidencias", methods=["POST"])
+@login_required
+def api_crear_incidencia():
+    data = request.get_json() or {}
+    titulo = (data.get("titulo") or "").strip()
+    if not titulo:
+        return jsonify(error="El titulo es obligatorio"), 400
+    cliente_id = current_user.cliente_id if current_user.es_cliente else data.get("cliente_id")
+    inc_id = modelos.crear_incidencia(
+        titulo=titulo,
+        descripcion=data.get("descripcion"),
+        prioridad=data.get("prioridad", "media"),
+        categoria=data.get("categoria"),
+        cliente_id=cliente_id,
+        tecnico_id=data.get("tecnico_id"),
+    )
+    modelos.registrar_auditoria(inc_id, current_user.nombre, "creacion")
+    return jsonify(id=inc_id, mensaje="Incidencia creada"), 201
+
+
+@app.route("/api/incidencias/<int:inc_id>/estado", methods=["PUT"])
+@login_required
+def api_cambiar_estado(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        return jsonify(error="No encontrada"), 404
+    data = request.get_json() or {}
+    nuevo_estado = data.get("estado")
+    if nuevo_estado not in ESTADOS:
+        return jsonify(error="Estado invalido"), 400
+    modelos.actualizar_incidencia(inc_id, estado=nuevo_estado)
+    modelos.registrar_auditoria(inc_id, current_user.nombre, "cambio_estado",
+                                "estado", inc["estado"], nuevo_estado)
+    return jsonify(ok=True, estado=nuevo_estado)
+
+
+@app.route("/api/incidencias/<int:inc_id>/notas", methods=["POST"])
+@login_required
+def api_agregar_nota(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        return jsonify(error="No encontrada"), 404
+    if current_user.es_cliente and inc["cliente_id"] != current_user.cliente_id:
+        return jsonify(error="No autorizado"), 403
+    data = request.get_json() or {}
+    contenido = (data.get("contenido") or "").strip()
+    if not contenido:
+        return jsonify(error="El contenido es obligatorio"), 400
+    nota_id = modelos.agregar_nota(inc_id, contenido, autor=current_user.nombre)
+    return jsonify(id=nota_id, mensaje="Nota agregada"), 201
+
+
+@app.route("/api/estadisticas")
+@login_required
+@staff_required
+def api_estadisticas():
+    resumen = reportes.resumen_general()
+    sla_stats = modelos.metricas_sla()
+    satisf = modelos.promedio_satisfaccion()
+    return jsonify(resumen=resumen, sla=sla_stats, satisfaccion=satisf)
+
+
 # ── Reportes ─────────────────────────────────────────────────────────────
 
 @app.route("/reportes")
@@ -803,10 +1208,13 @@ def vista_reportes():
     por_tecnico = reportes.incidencias_por_tecnico()
     por_cliente = reportes.incidencias_por_cliente()
     por_categoria = reportes.incidencias_por_categoria()
+    sla_stats = modelos.metricas_sla()
+    satisf = modelos.promedio_satisfaccion()
     return render_template(
         "reportes.html", resumen=resumen,
         por_tecnico=por_tecnico, por_cliente=por_cliente,
-        por_categoria=por_categoria,
+        por_categoria=por_categoria, sla_stats=sla_stats,
+        satisfaccion=satisf,
     )
 
 

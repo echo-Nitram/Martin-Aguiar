@@ -14,6 +14,44 @@
 {% block content %}
 <h2 class="mb-4"><i class="bi bi-bar-chart-line"></i> Reportes</h2>
 
+<!-- SLA & Satisfaction Summary -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Cumplimiento SLA</h6>
+                <h2 class="text-{{ 'success' if (sla_stats.pct_cumplimiento|default(0)) >= 80 else 'warning' if (sla_stats.pct_cumplimiento|default(0)) >= 50 else 'danger' }}">
+                    {{ sla_stats.pct_cumplimiento|default(0) }}%
+                </h2>
+                <small class="text-muted">{{ sla_stats.cumplidos|default(0) }} de {{ sla_stats.total|default(0) }} en tiempo</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Tiempo Promedio Resolucion</h6>
+                <h2>{{ sla_stats.tiempo_promedio_horas|default(0) }}h</h2>
+                <small class="text-muted">{{ sla_stats.total|default(0) }} incidencias resueltas</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <h6 class="text-muted text-uppercase">Satisfaccion</h6>
+                <h2>
+                    {% for i in range(1, 6) %}
+                    <i class="bi bi-star{{ '-fill text-warning' if i <= (satisfaccion.promedio|default(0)) else ' text-muted' }}" style="font-size: 1rem;"></i>
+                    {% endfor %}
+                    {{ satisfaccion.promedio|default(0) }}
+                </h2>
+                <small class="text-muted">{{ satisfaccion.total|default(0) }} calificaciones</small>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-4">
     <!-- Doughnut: By State -->
     <div class="col-md-6">
@@ -75,6 +113,8 @@
                     <tr><td>Incidencias abiertas</td><td>{{ resumen.abiertas|default(0) }}</td></tr>
                     <tr><td>Total de clientes</td><td>{{ resumen.total_clientes|default(0) }}</td></tr>
                     <tr><td>Total de tecnicos</td><td>{{ resumen.total_tecnicos|default(0) }}</td></tr>
+                    <tr><td>SLA vencidos</td><td class="text-danger">{{ sla_stats.vencidos|default(0) }}</td></tr>
+                    <tr><td>Tiempo promedio resolucion</td><td>{{ sla_stats.tiempo_promedio_horas|default(0) }}h</td></tr>
                 </tbody>
             </table>
         </div>
@@ -84,7 +124,6 @@
 
 {% block extra_js %}
 <script>
-// Extract data from resumen dict passed by Jinja2
 const porEstado = {{ resumen.por_estado|default({})|tojson }};
 const porPrioridad = {{ resumen.por_prioridad|default({})|tojson }};
 
@@ -102,7 +141,6 @@ const prioridadColorMap = {
     'critica': '#dc3545'
 };
 
-// Doughnut chart: States
 new Chart(document.getElementById('chartEstados'), {
     type: 'doughnut',
     data: {
@@ -115,13 +153,10 @@ new Chart(document.getElementById('chartEstados'), {
     },
     options: {
         responsive: true,
-        plugins: {
-            legend: { position: 'bottom' }
-        }
+        plugins: { legend: { position: 'bottom' } }
     }
 });
 
-// Doughnut chart: Priorities
 new Chart(document.getElementById('chartPrioridades'), {
     type: 'doughnut',
     data: {
@@ -134,13 +169,10 @@ new Chart(document.getElementById('chartPrioridades'), {
     },
     options: {
         responsive: true,
-        plugins: {
-            legend: { position: 'bottom' }
-        }
+        plugins: { legend: { position: 'bottom' } }
     }
 });
 
-// Bar chart: Technicians
 const porTecnico = {{ por_tecnico|default([])|tojson }};
 new Chart(document.getElementById('chartTecnicos'), {
     type: 'bar',
@@ -163,10 +195,7 @@ new Chart(document.getElementById('chartTecnicos'), {
     options: {
         responsive: true,
         scales: {
-            y: {
-                beginAtZero: true,
-                ticks: { stepSize: 1 }
-            }
+            y: { beginAtZero: true, ticks: { stepSize: 1 } }
         }
     }
 });

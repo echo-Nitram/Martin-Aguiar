@@ -12,6 +12,7 @@
         body { min-height: 100vh; display: flex; flex-direction: column; }
         main { flex: 1; }
         .sidebar-card { position: sticky; top: 1rem; }
+        .notif-dropdown { width: 350px; max-height: 400px; overflow-y: auto; }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -34,6 +35,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard_tecnico') }}">
+                            <i class="bi bi-kanban"></i> Mi Panel
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('lista_incidencias') }}">
                             <i class="bi bi-exclamation-triangle"></i> Incidencias
                         </a>
@@ -45,12 +51,17 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('lista_tecnicos') }}">
-                            <i class="bi bi-person-badge"></i> Técnicos
+                            <i class="bi bi-person-badge"></i> Tecnicos
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('vista_reportes') }}">
                             <i class="bi bi-bar-chart-line"></i> Reportes
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('kb_lista') }}">
+                            <i class="bi bi-book"></i> Conocimiento
                         </a>
                     </li>
                 </ul>
@@ -64,15 +75,41 @@
                 </form>
                 {% if current_user.is_authenticated %}
                 <ul class="navbar-nav">
+                    <!-- Notifications Bell -->
+                    <li class="nav-item dropdown me-2">
+                        <a class="nav-link position-relative" href="#" role="button"
+                           data-bs-toggle="dropdown" aria-expanded="false" id="notifBell">
+                            <i class="bi bi-bell"></i>
+                            {% if notif_count > 0 %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="notifBadge">
+                                {{ notif_count }}
+                            </span>
+                            {% endif %}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end notif-dropdown" id="notifDropdown">
+                            <li>
+                                <div class="d-flex justify-content-between align-items-center px-3 py-2">
+                                    <strong>Notificaciones</strong>
+                                    <a href="{{ url_for('lista_notificaciones') }}" class="small">Ver todas</a>
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="px-3 py-2 text-muted text-center small" id="notifLoading">
+                                Cargando...
+                            </li>
+                        </ul>
+                    </li>
+                    <!-- User Menu -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button"
                            data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i> {{ current_user.nombre }}
+                            <span class="badge bg-secondary">{{ current_user.role }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li>
                                 <a class="dropdown-item" href="{{ url_for('logout') }}">
-                                    <i class="bi bi-box-arrow-right"></i> Cerrar sesión
+                                    <i class="bi bi-box-arrow-right"></i> Cerrar sesion
                                 </a>
                             </li>
                         </ul>
@@ -101,7 +138,7 @@
     </main>
 
     <footer class="bg-dark text-light text-center py-3 mt-4">
-        <small>&copy; {{ now().year if now is defined else '2026' }} Sistema de Gestión de Incidencias</small>
+        <small>&copy; {{ now().year if now is defined else '2026' }} Sistema de Gestion de Incidencias</small>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -113,6 +150,41 @@
             options.headers['X-CSRFToken'] = CSRF_TOKEN;
             return fetch(url, options);
         }
+
+        // Notifications dropdown
+        document.getElementById('notifBell')?.addEventListener('click', function() {
+            const dropdown = document.getElementById('notifDropdown');
+            const loading = document.getElementById('notifLoading');
+            fetch('/notificaciones/json', { headers: { 'X-CSRFToken': CSRF_TOKEN } })
+                .then(r => r.json())
+                .then(data => {
+                    // Remove loading
+                    if (loading) loading.remove();
+                    // Remove old items
+                    dropdown.querySelectorAll('.notif-item').forEach(el => el.remove());
+                    if (data.notificaciones.length === 0) {
+                        const li = document.createElement('li');
+                        li.className = 'notif-item px-3 py-2 text-muted text-center small';
+                        li.textContent = 'No hay notificaciones';
+                        dropdown.appendChild(li);
+                    } else {
+                        data.notificaciones.forEach(n => {
+                            const li = document.createElement('li');
+                            li.className = 'notif-item';
+                            const a = document.createElement('a');
+                            a.className = 'dropdown-item small' + (n.leida ? '' : ' fw-bold');
+                            a.href = n.enlace || '/notificaciones';
+                            a.innerHTML = `<div>${n.titulo}</div><small class="text-muted">${n.mensaje.substring(0, 60)}...</small>`;
+                            a.addEventListener('click', function() {
+                                fetchWithCsrf('/notificaciones/' + n.id + '/leer', { method: 'POST' });
+                            });
+                            li.appendChild(a);
+                            dropdown.appendChild(li);
+                        });
+                    }
+                })
+                .catch(() => {});
+        });
     </script>
     {% block extra_js %}{% endblock %}
 </body>

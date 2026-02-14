@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Base de Conocimiento{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Inicio</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Base de Conocimiento</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-book"></i> Base de Conocimiento</h2>
+    {% if current_user.is_authenticated and current_user.es_staff %}
+    <a href="{{ url_for('kb_nuevo') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Nuevo Articulo
+    </a>
+    {% endif %}
+</div>
+
+<!-- Search & Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <input type="text" class="form-control" name="q" placeholder="Buscar articulos..."
+                           value="{{ busqueda or '' }}">
+                    <button class="btn btn-outline-primary" type="submit">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" name="categoria" onchange="this.form.submit()">
+                    <option value="">Todas las categorias</option>
+                    {% for cat in categorias %}
+                    <option value="{{ cat }}" {{ 'selected' if filtro_categoria == cat }}>{{ cat|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('kb_lista') }}" class="btn btn-outline-secondary w-100">Limpiar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Articles -->
+{% if articulos %}
+<div class="row g-3">
+    {% for art in articulos %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h5 class="card-title mb-0">
+                        <a href="{{ url_for('kb_detalle', art_id=art.id) }}" class="text-decoration-none">
+                            {{ art.titulo }}
+                        </a>
+                    </h5>
+                </div>
+                {% if art.categoria %}
+                <span class="badge bg-info mb-2">{{ art.categoria }}</span>
+                {% endif %}
+                <p class="card-text text-muted small">{{ art.contenido|truncate(150) }}</p>
+            </div>
+            <div class="card-footer bg-transparent d-flex justify-content-between">
+                <small class="text-muted"><i class="bi bi-eye"></i> {{ art.visitas }} visitas</small>
+                <small class="text-muted">{{ art.creado_en|hace }}</small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-journal-x" style="font-size: 4rem; color: #ccc;"></i>
+    <h4 class="mt-3 text-muted">No hay articulos{% if busqueda %} que coincidan con "{{ busqueda }}"{% endif %}</h4>
+</div>
+{% endif %}
+{% endblock %}

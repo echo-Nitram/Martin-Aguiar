@@ -11,6 +11,7 @@
     .ia-result-area { min-height: 120px; }
     .attachment-item { border-left: 3px solid #0d6efd; }
     .note-card { border-left: 3px solid #ffc107; }
+    .audit-item { border-left: 3px solid #6c757d; }
 </style>
 {% endblock %}
 
@@ -70,6 +71,22 @@
                     </div>
                     {% endif %}
                 </div>
+
+                <!-- SLA Indicator -->
+                <div class="alert alert-{{ sla_color.get(sla.estado_sla, 'secondary') }} py-2 mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-clock"></i> <strong>SLA:</strong>
+                            {{ sla.horas_transcurridas|default(0) }}h / {{ sla.limite_resolucion|default(0) }}h
+                            — <strong>{{ sla.estado_sla|default('sin_sla')|replace('_',' ')|upper }}</strong>
+                        </span>
+                    </div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-{{ sla_color.get(sla.estado_sla, 'secondary') }}"
+                             style="width: {{ sla.porcentaje_resolucion|default(0) }}%"></div>
+                    </div>
+                </div>
+
                 <hr>
                 <h6>Descripcion</h6>
                 <p class="mb-0" style="white-space: pre-wrap;">{{ inc.descripcion or 'Sin descripcion.' }}</p>
@@ -149,6 +166,52 @@
             </div>
         </div>
 
+        <!-- ===== SATISFACTION (if resolved/closed) ===== -->
+        {% if inc.estado in ('resuelta', 'cerrada') %}
+        <div class="card mb-3">
+            <div class="card-header bg-warning bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-star"></i> Encuesta de Satisfaccion</h5>
+            </div>
+            <div class="card-body">
+                {% if satisfaccion %}
+                <div class="text-center">
+                    <h4>
+                        {% for i in range(1, 6) %}
+                        <i class="bi bi-star{{ '-fill text-warning' if i <= satisfaccion.puntuacion else ' text-muted' }}" style="font-size: 1.5rem;"></i>
+                        {% endfor %}
+                    </h4>
+                    <p class="mb-0">{{ satisfaccion.puntuacion }} / 5</p>
+                    {% if satisfaccion.comentario %}
+                    <p class="text-muted mt-2"><em>"{{ satisfaccion.comentario }}"</em></p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <form method="post" action="{{ url_for('calificar_incidencia', inc_id=inc.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="text-center mb-3">
+                        <p>Como calificarias la resolucion de esta incidencia?</p>
+                        <div class="btn-group" role="group">
+                            {% for i in range(1, 6) %}
+                            <input type="radio" class="btn-check" name="puntuacion" id="star{{ i }}" value="{{ i }}" required>
+                            <label class="btn btn-outline-warning" for="star{{ i }}">
+                                <i class="bi bi-star-fill"></i> {{ i }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <textarea class="form-control" name="comentario" rows="2"
+                                  placeholder="Comentario opcional..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="bi bi-send"></i> Enviar Calificacion
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- ===== AI SECTION ===== -->
         <div class="card mb-3">
             <div class="card-header bg-info bg-opacity-10">
@@ -156,7 +219,6 @@
             </div>
             <div class="card-body">
                 {% if ia_disponible %}
-                <!-- Context input -->
                 <div class="mb-3">
                     <label for="iaContexto" class="form-label fw-bold">
                         Que quieres transmitir al cliente?
@@ -164,8 +226,6 @@
                     <textarea class="form-control" id="iaContexto" rows="3"
                               placeholder="Describe lo que quieres comunicar al cliente, el diagnostico realizado, etc."></textarea>
                 </div>
-
-                <!-- Action buttons -->
                 <div class="d-flex gap-2 mb-3 flex-wrap">
                     <button class="btn btn-outline-primary" id="btnIaRespuesta">
                         <i class="bi bi-chat-dots"></i> Generar Respuesta
@@ -177,16 +237,12 @@
                         <i class="bi bi-card-text"></i> Resumen
                     </button>
                 </div>
-
-                <!-- Loading spinner -->
                 <div id="iaLoading" class="text-center py-3 d-none">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Procesando...</span>
                     </div>
                     <p class="text-muted mt-2">La IA esta procesando tu solicitud...</p>
                 </div>
-
-                <!-- Result area -->
                 <div id="iaResultado" class="d-none">
                     <label class="form-label fw-bold">Resultado de la IA:</label>
                     <textarea class="form-control ia-result-area" id="iaTextoResultado" rows="6"></textarea>
@@ -211,7 +267,7 @@
             </div>
         </div>
 
-        <!-- ===== CHAT PANEL (Accordion) ===== -->
+        <!-- ===== CHAT PANEL ===== -->
         <div class="accordion mb-3" id="accordionChat">
             <div class="accordion-item">
                 <h2 class="accordion-header">
@@ -242,16 +298,14 @@
                             </button>
                         </div>
                         {% else %}
-                        <div class="alert alert-warning mb-0">
-                            Chat IA no disponible.
-                        </div>
+                        <div class="alert alert-warning mb-0">Chat IA no disponible.</div>
                         {% endif %}
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- ===== AI HISTORY (Accordion) ===== -->
+        <!-- ===== AI HISTORY ===== -->
         <div class="accordion mb-3" id="accordionHistorialIA">
             <div class="accordion-item">
                 <h2 class="accordion-header">
@@ -277,6 +331,43 @@
                         </div>
                         {% else %}
                         <p class="text-muted mb-0">No hay historial de IA.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== AUDIT LOG ===== -->
+        <div class="accordion mb-3" id="accordionAuditoria">
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#collapseAuditoria"
+                            aria-expanded="false" aria-controls="collapseAuditoria">
+                        <i class="bi bi-shield-check me-2"></i> Historial de Cambios ({{ auditoria|length }})
+                    </button>
+                </h2>
+                <div id="collapseAuditoria" class="accordion-collapse collapse" data-bs-parent="#accordionAuditoria">
+                    <div class="accordion-body">
+                        {% for entry in auditoria %}
+                        <div class="card audit-item mb-2">
+                            <div class="card-body py-2 px-3">
+                                <div class="d-flex justify-content-between">
+                                    <span>
+                                        <i class="bi bi-person"></i> <strong>{{ entry.usuario }}</strong>
+                                        — {{ entry.accion|replace('_',' ') }}
+                                    </span>
+                                    <small class="text-muted">{{ entry.creado_en|hace }}</small>
+                                </div>
+                                {% if entry.campo %}
+                                <small class="text-muted">
+                                    {{ entry.campo }}: {{ entry.valor_anterior or '—' }} → {{ entry.valor_nuevo or '—' }}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">No hay registros de auditoria.</p>
                         {% endfor %}
                     </div>
                 </div>
@@ -373,7 +464,6 @@ function hideIaLoading() {
     iaLoading.classList.add('d-none');
 }
 
-// Generate Response
 document.getElementById('btnIaRespuesta')?.addEventListener('click', function() {
     const contexto = iaContexto.value.trim();
     if (!contexto) { alert('Escribe que quieres transmitir al cliente.'); return; }
@@ -386,7 +476,6 @@ document.getElementById('btnIaRespuesta')?.addEventListener('click', function() 
         .catch(e => { hideIaLoading(); alert('Error: ' + e.message); });
 });
 
-// Diagnostic
 document.getElementById('btnIaDiagnostico')?.addEventListener('click', function() {
     showIaLoading();
     fetch(`/incidencias/${INC_ID}/ia/diagnostico`, { method: 'POST', headers })
@@ -395,7 +484,6 @@ document.getElementById('btnIaDiagnostico')?.addEventListener('click', function(
         .catch(e => { hideIaLoading(); alert('Error: ' + e.message); });
 });
 
-// Summary
 document.getElementById('btnIaResumen')?.addEventListener('click', function() {
     showIaLoading();
     fetch(`/incidencias/${INC_ID}/ia/resumen`, { method: 'POST', headers })
@@ -404,7 +492,6 @@ document.getElementById('btnIaResumen')?.addEventListener('click', function() {
         .catch(e => { hideIaLoading(); alert('Error: ' + e.message); });
 });
 
-// Save as Note
 document.getElementById('btnIaGuardarNota')?.addEventListener('click', function() {
     const contenido = iaTexto.value.trim();
     if (!contenido) return;
@@ -416,7 +503,6 @@ document.getElementById('btnIaGuardarNota')?.addEventListener('click', function(
         .catch(e => alert('Error: ' + e.message));
 });
 
-// Copy
 document.getElementById('btnIaCopiar')?.addEventListener('click', function() {
     navigator.clipboard.writeText(iaTexto.value).then(() => {
         this.innerHTML = '<i class="bi bi-check"></i> Copiado';
@@ -424,7 +510,6 @@ document.getElementById('btnIaCopiar')?.addEventListener('click', function() {
     });
 });
 
-// Discard
 document.getElementById('btnIaDescartar')?.addEventListener('click', function() {
     iaResultado.classList.add('d-none');
     iaTexto.value = '';
@@ -471,7 +556,6 @@ chatInput?.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
 });
 
-// Load chat history on expand
 document.getElementById('collapseChat')?.addEventListener('shown.bs.collapse', function() {
     fetch(`/incidencias/${INC_ID}/ia/chat/historial`, { headers: { 'X-CSRFToken': CSRF } })
         .then(r => r.json())
@@ -484,7 +568,6 @@ document.getElementById('collapseChat')?.addEventListener('shown.bs.collapse', f
         .catch(() => {});
 });
 
-// Clear chat
 document.getElementById('btnChatClear')?.addEventListener('click', function() {
     if (!confirm('Limpiar el historial del chat?')) return;
     fetch(`/incidencias/${INC_ID}/ia/chat/limpiar`, { method: 'POST', headers })

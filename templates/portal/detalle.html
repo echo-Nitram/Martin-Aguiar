@@ -40,6 +40,22 @@
                         <span title="{{ inc.creado_en }}">{{ inc.creado_en|hace }}</span>
                     </div>
                 </div>
+
+                <!-- SLA Indicator -->
+                {% if sla %}
+                <div class="alert alert-{{ sla_color.get(sla.estado_sla, 'secondary') }} py-2 mb-3">
+                    <small>
+                        <i class="bi bi-clock"></i> <strong>SLA:</strong>
+                        {{ sla.estado_sla|replace('_',' ')|capitalize }}
+                        ({{ sla.horas_transcurridas|default(0) }}h / {{ sla.limite_resolucion|default(0) }}h)
+                    </small>
+                    <div class="progress mt-1" style="height: 4px;">
+                        <div class="progress-bar bg-{{ sla_color.get(sla.estado_sla, 'secondary') }}"
+                             style="width: {{ sla.porcentaje_resolucion|default(0) }}%"></div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <hr>
                 <h6>Descripcion</h6>
                 <p class="mb-0" style="white-space: pre-wrap;">{{ inc.descripcion or 'Sin descripcion.' }}</p>
@@ -90,6 +106,52 @@
             </div>
         </div>
 
+        <!-- Satisfaction Survey (for resolved/closed) -->
+        {% if inc.estado in ('resuelta', 'cerrada') %}
+        <div class="card mb-3">
+            <div class="card-header bg-warning bg-opacity-10">
+                <h5 class="mb-0"><i class="bi bi-star"></i> Califica la atencion</h5>
+            </div>
+            <div class="card-body">
+                {% if satisfaccion %}
+                <div class="text-center">
+                    <h4>
+                        {% for i in range(1, 6) %}
+                        <i class="bi bi-star{{ '-fill text-warning' if i <= satisfaccion.puntuacion else ' text-muted' }}" style="font-size: 1.5rem;"></i>
+                        {% endfor %}
+                    </h4>
+                    <p class="mb-0">Gracias por tu calificacion!</p>
+                    {% if satisfaccion.comentario %}
+                    <p class="text-muted mt-2"><em>"{{ satisfaccion.comentario }}"</em></p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <form method="post" action="{{ url_for('calificar_incidencia', inc_id=inc.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="text-center mb-3">
+                        <p>Como fue tu experiencia con la resolucion?</p>
+                        <div class="btn-group" role="group">
+                            {% for i in range(1, 6) %}
+                            <input type="radio" class="btn-check" name="puntuacion" id="star{{ i }}" value="{{ i }}" required>
+                            <label class="btn btn-outline-warning" for="star{{ i }}">
+                                <i class="bi bi-star-fill"></i> {{ i }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <textarea class="form-control" name="comentario" rows="2"
+                                  placeholder="Comentario opcional..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning btn-sm w-100">
+                        <i class="bi bi-send"></i> Enviar Calificacion
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Attachments -->
         <div class="card">
             <div class="card-header">
@@ -128,7 +190,7 @@
 
     <!-- Sidebar -->
     <div class="col-lg-4">
-        <div class="card bg-light">
+        <div class="card bg-light mb-3">
             <div class="card-body">
                 <h6><i class="bi bi-info-circle"></i> Estado de tu incidencia</h6>
                 <hr>
@@ -166,6 +228,22 @@
                 </small>
             </div>
         </div>
+
+        <!-- Reopen button -->
+        {% if inc.estado in ('resuelta', 'cerrada') %}
+        <div class="card border-warning">
+            <div class="card-body">
+                <p class="small text-muted mb-2">El problema no fue resuelto?</p>
+                <form method="post" action="{{ url_for('portal_reabrir', inc_id=inc.id) }}"
+                      onsubmit="return confirm('Reabrir esta incidencia?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-warning btn-sm w-100">
+                        <i class="bi bi-arrow-counterclockwise"></i> Reabrir Incidencia
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
