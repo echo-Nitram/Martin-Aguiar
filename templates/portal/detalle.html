@@ -1,0 +1,171 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Incidencia #{{ inc.id }} - Portal del Cliente{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('portal_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver a mis incidencias
+    </a>
+</div>
+
+<div class="row g-4">
+    <!-- Main -->
+    <div class="col-lg-8">
+        <!-- Incident info -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">#{{ inc.id }} — {{ inc.titulo }}</h4>
+                <div>
+                    <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }} fs-6">
+                        {{ inc.estado|replace('_',' ')|capitalize }}
+                    </span>
+                    <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }} fs-6">
+                        {{ inc.prioridad|capitalize }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <small class="text-muted">Categoria</small><br>
+                        <strong>{{ inc.categoria|default('Sin definir') }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Tecnico asignado</small><br>
+                        <strong>{{ inc.tecnico_nombre or 'Pendiente de asignacion' }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">Creada</small><br>
+                        <span title="{{ inc.creado_en }}">{{ inc.creado_en|hace }}</span>
+                    </div>
+                </div>
+                <hr>
+                <h6>Descripcion</h6>
+                <p class="mb-0" style="white-space: pre-wrap;">{{ inc.descripcion or 'Sin descripcion.' }}</p>
+            </div>
+        </div>
+
+        <!-- Conversation / Notes -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Conversacion</h5>
+            </div>
+            <div class="card-body">
+                {% for nota in notas %}
+                <div class="d-flex mb-3 {{ 'justify-content-end' if nota.autor == current_user.nombre else '' }}">
+                    <div class="p-3 rounded {{ 'bg-primary text-white' if nota.autor == current_user.nombre else 'bg-light' }}"
+                         style="max-width: 80%;">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="fw-bold">
+                                <i class="bi bi-person"></i>
+                                {{ nota.autor or 'Equipo de Soporte' }}
+                            </small>
+                            <small class="{{ 'text-white-50' if nota.autor == current_user.nombre else 'text-muted' }} ms-3">
+                                {{ nota.creado_en|hace }}
+                            </small>
+                        </div>
+                        <p class="mb-0" style="white-space: pre-wrap;">{{ nota.contenido }}</p>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">
+                    <i class="bi bi-chat-dots" style="font-size: 2rem;"></i><br>
+                    No hay mensajes todavia. Envia un mensaje al equipo de soporte.
+                </p>
+                {% endfor %}
+
+                <hr>
+
+                <form method="post" action="{{ url_for('portal_agregar_nota', inc_id=inc.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group">
+                        <textarea class="form-control" name="contenido" rows="2"
+                                  placeholder="Escribe un mensaje..." required></textarea>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Attachments -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-paperclip"></i> Archivos Adjuntos ({{ adjuntos|length }})</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('portal_subir_adjunto', inc_id=inc.id) }}"
+                      enctype="multipart/form-data" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group">
+                        <input type="file" class="form-control" name="archivo" required>
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi bi-upload"></i> Subir
+                        </button>
+                    </div>
+                    <div class="form-text">Podes adjuntar capturas de pantalla, logs o documentos relevantes.</div>
+                </form>
+                {% if adjuntos %}
+                <ul class="list-group">
+                    {% for adj in adjuntos %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-file-earmark"></i>
+                            <a href="{{ url_for('descargar_adjunto', adjunto_id=adj.id) }}">{{ adj.nombre_original }}</a>
+                            <small class="text-muted ms-2">{{ adj.creado_en|hace }}</small>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">No hay archivos adjuntos.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6><i class="bi bi-info-circle"></i> Estado de tu incidencia</h6>
+                <hr>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-{{ estado_color.get('abierta', 'secondary') }} me-2">1</span>
+                        <span class="{{ 'fw-bold' if inc.estado == 'abierta' }}">Abierta</span>
+                        {% if inc.estado == 'abierta' %}<i class="bi bi-arrow-left ms-2 text-primary"></i>{% endif %}
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-{{ estado_color.get('en_progreso', 'secondary') }} me-2">2</span>
+                        <span class="{{ 'fw-bold' if inc.estado == 'en_progreso' }}">En progreso</span>
+                        {% if inc.estado == 'en_progreso' %}<i class="bi bi-arrow-left ms-2 text-primary"></i>{% endif %}
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-{{ estado_color.get('en_espera', 'secondary') }} me-2">3</span>
+                        <span class="{{ 'fw-bold' if inc.estado == 'en_espera' }}">En espera</span>
+                        {% if inc.estado == 'en_espera' %}<i class="bi bi-arrow-left ms-2 text-primary"></i>{% endif %}
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-{{ estado_color.get('resuelta', 'secondary') }} me-2">4</span>
+                        <span class="{{ 'fw-bold' if inc.estado == 'resuelta' }}">Resuelta</span>
+                        {% if inc.estado == 'resuelta' %}<i class="bi bi-arrow-left ms-2 text-primary"></i>{% endif %}
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-{{ estado_color.get('cerrada', 'secondary') }} me-2">5</span>
+                        <span class="{{ 'fw-bold' if inc.estado == 'cerrada' }}">Cerrada</span>
+                        {% if inc.estado == 'cerrada' %}<i class="bi bi-arrow-left ms-2 text-primary"></i>{% endif %}
+                    </div>
+                </div>
+                <hr>
+                <small class="text-muted">
+                    <i class="bi bi-clock"></i> Ultima actualizacion:
+                    <span title="{{ inc.actualizado_en }}">{{ inc.actualizado_en|hace }}</span>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -85,6 +85,15 @@ class User(UserMixin):
         self.username = user_dict["username"]
         self.nombre = user_dict["nombre"]
         self.role = user_dict["role"]
+        self.cliente_id = user_dict.get("cliente_id")
+
+    @property
+    def es_staff(self):
+        return self.role in ("admin", "tecnico")
+
+    @property
+    def es_cliente(self):
+        return self.role == "cliente"
 
 
 @login_manager.user_loader
@@ -167,10 +176,15 @@ def login():
         password = request.form.get("password", "")
         user_data = modelos.autenticar_usuario(username, password)
         if user_data:
-            login_user(User(user_data))
+            user = User(user_data)
+            login_user(user)
             flash(f"Bienvenido, {user_data['nombre']}!", "success")
             next_page = request.args.get("next")
-            return redirect(next_page or url_for("dashboard"))
+            if next_page:
+                return redirect(next_page)
+            if user.es_cliente:
+                return redirect(url_for("portal_dashboard"))
+            return redirect(url_for("dashboard"))
         flash("Usuario o contrasena incorrectos", "danger")
     return render_template("login.html")
 
@@ -180,14 +194,68 @@ def login():
 def logout():
     logout_user()
     flash("Sesion cerrada", "info")
-    return redirect(url_for("login"))
+    return redirect(url_for("landing"))
 
 
-# ── Dashboard ────────────────────────────────────────────────────────────
+# ── Landing Page (publica) ───────────────────────────────────────────────
 
 @app.route("/")
+def landing():
+    if current_user.is_authenticated:
+        if current_user.es_cliente:
+            return redirect(url_for("portal_dashboard"))
+        return redirect(url_for("dashboard"))
+    return render_template("landing.html")
+
+
+# ── Registro de Clientes (publico) ──────────────────────────────────────
+
+@app.route("/registro", methods=["GET", "POST"])
+def registro():
+    if current_user.is_authenticated:
+        return redirect(url_for("landing"))
+    if request.method == "POST":
+        nombre, err = validar_texto(request.form.get("nombre"), 200, "nombre")
+        if err:
+            flash(err, "danger")
+            return redirect(url_for("registro"))
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        password2 = request.form.get("password2", "")
+        email = request.form.get("email", "").strip() or None
+        telefono = request.form.get("telefono", "").strip() or None
+        empresa = request.form.get("empresa", "").strip() or None
+
+        if not username or len(username) < 3:
+            flash("El usuario debe tener al menos 3 caracteres", "danger")
+            return redirect(url_for("registro"))
+        if len(password) < 6:
+            flash("La contrasena debe tener al menos 6 caracteres", "danger")
+            return redirect(url_for("registro"))
+        if password != password2:
+            flash("Las contrasenas no coinciden", "danger")
+            return redirect(url_for("registro"))
+        if modelos.usuario_existe(username):
+            flash("Ese nombre de usuario ya esta en uso", "danger")
+            return redirect(url_for("registro"))
+
+        cliente_id, user_id = modelos.registrar_cliente_usuario(
+            nombre, email, telefono, empresa, username, password,
+        )
+        user_data = modelos.obtener_usuario(user_id)
+        login_user(User(user_data))
+        flash(f"Bienvenido {nombre}! Tu cuenta ha sido creada.", "success")
+        return redirect(url_for("portal_dashboard"))
+    return render_template("registro.html")
+
+
+# ── Dashboard (staff) ───────────────────────────────────────────────────
+
+@app.route("/panel")
 @login_required
 def dashboard():
+    if current_user.es_cliente:
+        return redirect(url_for("portal_dashboard"))
     resumen = reportes.resumen_general()
     recientes, _ = modelos.listar_incidencias(per_page=5)
     return render_template("dashboard.html", resumen=resumen, recientes=recientes)
@@ -625,6 +693,105 @@ def ia_chat_historial(inc_id):
 def ia_chat_limpiar(inc_id):
     modelos.limpiar_chat(inc_id)
     return jsonify(ok=True)
+
+
+# ── Portal del Cliente ───────────────────────────────────────────────────
+
+@app.route("/portal")
+@login_required
+def portal_dashboard():
+    if current_user.es_staff:
+        return redirect(url_for("dashboard"))
+    items, total = modelos.listar_incidencias(cliente_id=current_user.cliente_id)
+    return render_template(
+        "portal/dashboard.html", incidencias=items, total=total,
+        estado_color=ESTADO_COLOR, prioridad_color=PRIORIDAD_COLOR,
+    )
+
+
+@app.route("/portal/nueva", methods=["GET", "POST"])
+@login_required
+def portal_nueva_incidencia():
+    if current_user.es_staff:
+        return redirect(url_for("nueva_incidencia"))
+    if request.method == "POST":
+        titulo, err = validar_texto(request.form.get("titulo"), 200, "titulo")
+        if err:
+            flash(err, "danger")
+            return redirect(url_for("portal_nueva_incidencia"))
+        modelos.crear_incidencia(
+            titulo=titulo,
+            descripcion=request.form.get("descripcion") or None,
+            prioridad=request.form.get("prioridad", "media"),
+            categoria=request.form.get("categoria") or None,
+            cliente_id=current_user.cliente_id,
+        )
+        flash("Incidencia creada correctamente. Nuestro equipo la revisara pronto.", "success")
+        return redirect(url_for("portal_dashboard"))
+    return render_template(
+        "portal/nueva_incidencia.html",
+        prioridades=PRIORIDADES, categorias=CATEGORIAS,
+    )
+
+
+@app.route("/portal/incidencia/<int:inc_id>")
+@login_required
+def portal_detalle(inc_id):
+    if current_user.es_staff:
+        return redirect(url_for("detalle_incidencia", inc_id=inc_id))
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc or inc["cliente_id"] != current_user.cliente_id:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("portal_dashboard"))
+    notas = modelos.listar_notas(inc_id)
+    adjuntos = modelos.listar_adjuntos(inc_id)
+    return render_template(
+        "portal/detalle.html", inc=inc, notas=notas, adjuntos=adjuntos,
+    )
+
+
+@app.route("/portal/incidencia/<int:inc_id>/nota", methods=["POST"])
+@login_required
+def portal_agregar_nota(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc or inc["cliente_id"] != current_user.cliente_id:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("portal_dashboard"))
+    contenido, err = validar_texto(request.form.get("contenido"), 2000, "contenido")
+    if err:
+        flash(err, "danger")
+        return redirect(url_for("portal_detalle", inc_id=inc_id))
+    modelos.agregar_nota(inc_id, contenido, autor=current_user.nombre)
+    flash("Mensaje enviado", "success")
+    return redirect(url_for("portal_detalle", inc_id=inc_id))
+
+
+@app.route("/portal/incidencia/<int:inc_id>/adjunto", methods=["POST"])
+@login_required
+def portal_subir_adjunto(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc or inc["cliente_id"] != current_user.cliente_id:
+        flash("Incidencia no encontrada", "danger")
+        return redirect(url_for("portal_dashboard"))
+    if "archivo" not in request.files:
+        flash("No se selecciono ningun archivo", "danger")
+        return redirect(url_for("portal_detalle", inc_id=inc_id))
+    archivo = request.files["archivo"]
+    if archivo.filename == "" or not allowed_file(archivo.filename):
+        flash("Archivo no valido o tipo no permitido", "danger")
+        return redirect(url_for("portal_detalle", inc_id=inc_id))
+
+    nombre_original = secure_filename(archivo.filename)
+    ext = nombre_original.rsplit(".", 1)[1].lower() if "." in nombre_original else ""
+    nombre_archivo = f"{uuid.uuid4().hex}.{ext}"
+    ruta = os.path.join(UPLOAD_FOLDER, nombre_archivo)
+    archivo.save(ruta)
+    tamano = os.path.getsize(ruta)
+
+    modelos.guardar_adjunto(inc_id, nombre_archivo, nombre_original,
+                            archivo.content_type, tamano, current_user.nombre)
+    flash("Archivo adjuntado", "success")
+    return redirect(url_for("portal_detalle", inc_id=inc_id))
 
 
 # ── Reportes ─────────────────────────────────────────────────────────────

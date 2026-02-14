@@ -91,9 +91,11 @@ def init_db(db_path=None):
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             nombre TEXT NOT NULL,
-            role TEXT DEFAULT 'tecnico' CHECK(role IN ('admin', 'tecnico')),
+            role TEXT DEFAULT 'tecnico' CHECK(role IN ('admin', 'tecnico', 'cliente')),
+            cliente_id INTEGER,
             activo INTEGER DEFAULT 1,
-            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id)
         );
 
         CREATE TABLE IF NOT EXISTS adjuntos (

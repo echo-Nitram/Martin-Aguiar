@@ -317,18 +317,25 @@ def limpiar_chat(incidencia_id):
 
 # ── Usuarios ──────────────────────────────────────────────────────────────
 
-def crear_usuario(username, password, nombre, role="tecnico"):
+def crear_usuario(username, password, nombre, role="tecnico", cliente_id=None):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        """INSERT INTO usuarios (username, password_hash, nombre, role)
-           VALUES (?, ?, ?, ?)""",
-        (username, generate_password_hash(password), nombre, role),
+        """INSERT INTO usuarios (username, password_hash, nombre, role, cliente_id)
+           VALUES (?, ?, ?, ?, ?)""",
+        (username, generate_password_hash(password), nombre, role, cliente_id),
     )
     conn.commit()
     user_id = cursor.lastrowid
     conn.close()
     return user_id
+
+
+def registrar_cliente_usuario(nombre, email, telefono, empresa, username, password):
+    """Registra un cliente y crea su cuenta de usuario en una sola operacion."""
+    cliente_id = crear_cliente(nombre, email, telefono, empresa)
+    user_id = crear_usuario(username, password, nombre, role="cliente", cliente_id=cliente_id)
+    return cliente_id, user_id
 
 
 def autenticar_usuario(username, password):

@@ -18,7 +18,7 @@ from incidencias.modelos import (
     crear_tecnico, listar_tecnicos, obtener_tecnico, actualizar_tecnico, desactivar_tecnico,
     crear_incidencia, listar_incidencias, obtener_incidencia, actualizar_incidencia,
     eliminar_incidencia, agregar_nota, listar_notas, buscar_incidencias,
-    crear_usuario, autenticar_usuario, usuario_existe,
+    crear_usuario, autenticar_usuario, usuario_existe, registrar_cliente_usuario,
     guardar_historial_ia, listar_historial_ia,
     guardar_mensaje_chat, listar_chat, limpiar_chat,
     guardar_adjunto, listar_adjuntos, obtener_adjunto,
@@ -32,7 +32,7 @@ def _limpiar_tablas():
     """Limpia todas las tablas para tests."""
     conn = get_connection()
     for tabla in ["chat_ia", "historial_ia", "adjuntos", "notas", "incidencias",
-                  "clientes", "tecnicos", "usuarios"]:
+                  "usuarios", "clientes", "tecnicos"]:
         conn.execute(f"DELETE FROM {tabla}")
     conn.commit()
     conn.close()
@@ -196,6 +196,31 @@ class TestUsuarios(unittest.TestCase):
         crear_usuario("admin", "123", "Admin")
         self.assertTrue(usuario_existe("admin"))
         self.assertFalse(usuario_existe("noexiste"))
+
+    def test_registrar_cliente_usuario(self):
+        cid, uid = registrar_cliente_usuario(
+            "Cliente Web", "web@test.com", "123", "WebCorp", "clienteweb", "pass123"
+        )
+        self.assertIsNotNone(cid)
+        self.assertIsNotNone(uid)
+        user = autenticar_usuario("clienteweb", "pass123")
+        self.assertIsNotNone(user)
+        self.assertEqual(user["role"], "cliente")
+        self.assertEqual(user["cliente_id"], cid)
+        cliente = obtener_cliente(cid)
+        self.assertEqual(cliente["nombre"], "Cliente Web")
+        self.assertEqual(cliente["empresa"], "WebCorp")
+
+    def test_cliente_ve_sus_incidencias(self):
+        cid, uid = registrar_cliente_usuario(
+            "Test", "t@t.com", None, None, "testcli", "pass123"
+        )
+        c2 = crear_cliente("Otro Cliente")
+        crear_incidencia("Mi problema", cliente_id=cid)
+        crear_incidencia("Otro problema", cliente_id=c2)
+        mis, total = listar_incidencias(cliente_id=cid)
+        self.assertEqual(total, 1)
+        self.assertEqual(mis[0]["titulo"], "Mi problema")
 
 
 class TestHistorialIA(unittest.TestCase):

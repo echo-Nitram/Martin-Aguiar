@@ -1,0 +1,75 @@
+{% extends "portal/base.html" %}
+
+{% block title %}Mis Incidencias - Portal del Cliente{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3><i class="bi bi-folder2-open"></i> Mis Incidencias</h3>
+        <p class="text-muted mb-0">Tenes {{ total }} incidencia{{ 's' if total != 1 }} registrada{{ 's' if total != 1 }}</p>
+    </div>
+    <a href="{{ url_for('portal_nueva_incidencia') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Nueva Incidencia
+    </a>
+</div>
+
+{% if incidencias %}
+<div class="row g-3">
+    {% for inc in incidencias %}
+    <div class="col-12">
+        <div class="card border-start border-4 border-{{ estado_color.get(inc.estado, 'secondary') }}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h5 class="card-title mb-1">
+                            <a href="{{ url_for('portal_detalle', inc_id=inc.id) }}" class="text-decoration-none">
+                                #{{ inc.id }} — {{ inc.titulo }}
+                            </a>
+                        </h5>
+                        <p class="text-muted small mb-2">
+                            {{ inc.descripcion|truncate(120) if inc.descripcion else 'Sin descripcion' }}
+                        </p>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="badge bg-{{ estado_color.get(inc.estado, 'secondary') }}">
+                                {{ inc.estado|replace('_',' ')|capitalize }}
+                            </span>
+                            <span class="badge bg-{{ prioridad_color.get(inc.prioridad, 'secondary') }}">
+                                {{ inc.prioridad|capitalize }}
+                            </span>
+                            {% if inc.categoria %}
+                            <span class="badge bg-light text-dark">{{ inc.categoria }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="text-end text-nowrap">
+                        <small class="text-muted d-block">
+                            <span title="{{ inc.creado_en }}">{{ inc.creado_en|hace }}</span>
+                        </small>
+                        {% if inc.tecnico_nombre %}
+                        <small class="text-muted">
+                            <i class="bi bi-person-badge"></i> {{ inc.tecnico_nombre }}
+                        </small>
+                        {% endif %}
+                        <div class="mt-2">
+                            <a href="{{ url_for('portal_detalle', inc_id=inc.id) }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> Ver detalle
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+    <h4 class="mt-3 text-muted">No tenes incidencias todavia</h4>
+    <p class="text-muted">Crea tu primera incidencia para que nuestro equipo pueda ayudarte.</p>
+    <a href="{{ url_for('portal_nueva_incidencia') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-plus-circle"></i> Crear Incidencia
+    </a>
+</div>
+{% endif %}
+{% endblock %}
