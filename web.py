@@ -1,8 +1,9 @@
 """Interfaz web para el Sistema de Gestión de Incidencias."""
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+import os
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from incidencias.database import init_db
-from incidencias import modelos, reportes
+from incidencias import modelos, reportes, ia
 
 app = Flask(__name__)
 app.secret_key = "incidencias-soporte-2024"
@@ -28,7 +29,9 @@ PRIORIDAD_COLOR = {
 
 @app.context_processor
 def utilidades():
-    return dict(estado_color=ESTADO_COLOR, prioridad_color=PRIORIDAD_COLOR)
+    ia_disponible = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return dict(estado_color=ESTADO_COLOR, prioridad_color=PRIORIDAD_COLOR,
+                ia_disponible=ia_disponible)
 
 
 # ── Dashboard ────────────────────────────────────────────────────────────
@@ -211,6 +214,60 @@ def desactivar_tecnico(tecnico_id):
     modelos.desactivar_tecnico(tecnico_id)
     flash("Técnico desactivado", "success")
     return redirect(url_for("lista_tecnicos"))
+
+
+# ── IA ───────────────────────────────────────────────────────────────────
+
+@app.route("/incidencias/<int:inc_id>/ia/respuesta", methods=["POST"])
+def ia_respuesta(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        return jsonify(error="Incidencia no encontrada"), 404
+    notas = modelos.listar_notas(inc_id)
+    try:
+        texto = ia.redactar_respuesta(inc, notas)
+        return jsonify(resultado=texto)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/incidencias/<int:inc_id>/ia/diagnostico", methods=["POST"])
+def ia_diagnostico(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        return jsonify(error="Incidencia no encontrada"), 404
+    notas = modelos.listar_notas(inc_id)
+    try:
+        texto = ia.diagnosticar(inc, notas)
+        return jsonify(resultado=texto)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/incidencias/<int:inc_id>/ia/resumen", methods=["POST"])
+def ia_resumen(inc_id):
+    inc = modelos.obtener_incidencia(inc_id)
+    if not inc:
+        return jsonify(error="Incidencia no encontrada"), 404
+    notas = modelos.listar_notas(inc_id)
+    try:
+        texto = ia.resumir_incidencia(inc, notas)
+        return jsonify(resultado=texto)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+
+
+@app.route("/ia/clasificar", methods=["POST"])
+def ia_clasificar():
+    titulo = request.form.get("titulo", "")
+    descripcion = request.form.get("descripcion", "")
+    if not titulo:
+        return jsonify(error="Se requiere un titulo"), 400
+    try:
+        resultado = ia.auto_clasificar(titulo, descripcion)
+        return jsonify(resultado)
+    except Exception as e:
+        return jsonify(error=str(e)), 500
 
 
 # ── Reportes ─────────────────────────────────────────────────────────────

@@ -26,6 +26,41 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if ia_disponible %}
+        <div class="card p-3 mt-3">
+            <h6 class="mb-2"><i class="bi bi-stars"></i> Asistente IA</h6>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button class="btn btn-sm btn-outline-info" onclick="iaAction('respuesta')">
+                    <i class="bi bi-chat-dots"></i> Redactar respuesta
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="iaAction('diagnostico')">
+                    <i class="bi bi-search"></i> Diagnostico
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="iaAction('resumen')">
+                    <i class="bi bi-file-text"></i> Resumir
+                </button>
+            </div>
+            <div id="ia-resultado" class="d-none">
+                <div id="ia-loading" class="text-center py-3 d-none">
+                    <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                    <span class="ms-2 text-muted">Pensando...</span>
+                </div>
+                <div id="ia-contenido" class="d-none">
+                    <div class="bg-light rounded p-3" style="white-space: pre-wrap;" id="ia-texto"></div>
+                    <div class="mt-2 d-flex gap-2">
+                        <button class="btn btn-sm btn-primary" onclick="usarComoNota()">
+                            <i class="bi bi-plus"></i> Usar como nota
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copiarIA()">
+                            <i class="bi bi-clipboard"></i> Copiar
+                        </button>
+                    </div>
+                </div>
+                <div id="ia-error" class="alert alert-danger d-none mb-0"></div>
+            </div>
+        </div>
+        {% endif %}
     </div>
     <div class="col-md-4">
         <div class="card p-3 mb-3">
@@ -69,14 +104,64 @@
     </div>
     {% endfor %}
     <hr>
-    <form method="post" action="{{ url_for('agregar_nota', inc_id=inc.id) }}">
+    <form method="post" action="{{ url_for('agregar_nota', inc_id=inc.id) }}" id="form-nota">
         <div class="mb-2">
-            <input type="text" name="autor" class="form-control form-control-sm" placeholder="Tu nombre (opcional)">
+            <input type="text" name="autor" id="nota-autor" class="form-control form-control-sm" placeholder="Tu nombre (opcional)">
         </div>
         <div class="mb-2">
-            <textarea name="contenido" class="form-control" rows="2" placeholder="Escribir nota..." required></textarea>
+            <textarea name="contenido" id="nota-contenido" class="form-control" rows="2" placeholder="Escribir nota..." required></textarea>
         </div>
         <button class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Agregar nota</button>
     </form>
 </div>
+
+{% if ia_disponible %}
+<script>
+function iaAction(tipo) {
+    const resultado = document.getElementById('ia-resultado');
+    const loading = document.getElementById('ia-loading');
+    const contenido = document.getElementById('ia-contenido');
+    const error = document.getElementById('ia-error');
+    const texto = document.getElementById('ia-texto');
+
+    resultado.classList.remove('d-none');
+    loading.classList.remove('d-none');
+    contenido.classList.add('d-none');
+    error.classList.add('d-none');
+
+    fetch("{{ url_for('ia_respuesta', inc_id=inc.id) }}".replace('/respuesta', '/' + tipo), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        loading.classList.add('d-none');
+        if (data.error) {
+            error.textContent = data.error;
+            error.classList.remove('d-none');
+        } else {
+            texto.textContent = data.resultado;
+            contenido.classList.remove('d-none');
+        }
+    })
+    .catch(err => {
+        loading.classList.add('d-none');
+        error.textContent = 'Error de conexion: ' + err.message;
+        error.classList.remove('d-none');
+    });
+}
+
+function usarComoNota() {
+    const texto = document.getElementById('ia-texto').textContent;
+    document.getElementById('nota-contenido').value = texto;
+    document.getElementById('nota-autor').value = 'IA Asistente';
+    document.getElementById('form-nota').scrollIntoView({behavior: 'smooth'});
+}
+
+function copiarIA() {
+    const texto = document.getElementById('ia-texto').textContent;
+    navigator.clipboard.writeText(texto);
+}
+</script>
+{% endif %}
 {% endblock %}

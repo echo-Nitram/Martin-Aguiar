@@ -7,17 +7,31 @@
     <form method="post">
         <div class="mb-3">
             <label class="form-label">Titulo *</label>
-            <input type="text" name="titulo" class="form-control" required
+            <input type="text" name="titulo" id="titulo" class="form-control" required
                    value="{{ incidencia.titulo if incidencia else '' }}">
         </div>
         <div class="mb-3">
             <label class="form-label">Descripcion</label>
-            <textarea name="descripcion" class="form-control" rows="3">{{ incidencia.descripcion if incidencia else '' }}</textarea>
+            <textarea name="descripcion" id="descripcion" class="form-control" rows="3">{{ incidencia.descripcion if incidencia else '' }}</textarea>
         </div>
+
+        {% if ia_disponible and not incidencia %}
+        <div class="mb-3">
+            <button type="button" class="btn btn-sm btn-outline-info" id="btn-clasificar" onclick="autoClasificar()">
+                <i class="bi bi-stars"></i> Auto-clasificar con IA
+            </button>
+            <span id="clasificar-loading" class="d-none">
+                <span class="spinner-border spinner-border-sm text-info"></span>
+                <span class="text-muted ms-1">Analizando...</span>
+            </span>
+            <small id="clasificar-razon" class="d-block text-muted mt-1 d-none"></small>
+        </div>
+        {% endif %}
+
         <div class="row g-3 mb-3">
             <div class="col-md-4">
                 <label class="form-label">Prioridad</label>
-                <select name="prioridad" class="form-select">
+                <select name="prioridad" id="prioridad" class="form-select">
                     {% for p in prioridades %}
                     <option value="{{ p }}" {{ 'selected' if incidencia and incidencia.prioridad == p }}>{{ p }}</option>
                     {% endfor %}
@@ -25,7 +39,7 @@
             </div>
             <div class="col-md-4">
                 <label class="form-label">Categoria</label>
-                <select name="categoria" class="form-select">
+                <select name="categoria" id="categoria" class="form-select">
                     <option value="">-- Ninguna --</option>
                     {% for c in categorias %}
                     <option value="{{ c }}" {{ 'selected' if incidencia and incidencia.categoria == c }}>{{ c }}</option>
@@ -59,4 +73,46 @@
         </div>
     </form>
 </div>
+
+{% if ia_disponible and not incidencia %}
+<script>
+function autoClasificar() {
+    const titulo = document.getElementById('titulo').value;
+    const descripcion = document.getElementById('descripcion').value;
+    if (!titulo.trim()) { alert('Escribe un titulo primero'); return; }
+
+    document.getElementById('btn-clasificar').classList.add('d-none');
+    document.getElementById('clasificar-loading').classList.remove('d-none');
+    document.getElementById('clasificar-razon').classList.add('d-none');
+
+    const body = new URLSearchParams({titulo: titulo, descripcion: descripcion});
+    fetch("{{ url_for('ia_clasificar') }}", {method: 'POST', body: body})
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('btn-clasificar').classList.remove('d-none');
+        document.getElementById('clasificar-loading').classList.add('d-none');
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        if (data.categoria) {
+            document.getElementById('categoria').value = data.categoria;
+        }
+        if (data.prioridad) {
+            document.getElementById('prioridad').value = data.prioridad;
+        }
+        if (data.razon) {
+            const razon = document.getElementById('clasificar-razon');
+            razon.textContent = 'IA: ' + data.razon;
+            razon.classList.remove('d-none');
+        }
+    })
+    .catch(err => {
+        document.getElementById('btn-clasificar').classList.remove('d-none');
+        document.getElementById('clasificar-loading').classList.add('d-none');
+        alert('Error: ' + err.message);
+    });
+}
+</script>
+{% endif %}
 {% endblock %}
